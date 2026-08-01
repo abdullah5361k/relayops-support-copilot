@@ -81,6 +81,12 @@ enum KnowledgeRunStatus {
   FAILED
 }
 
+enum SupportAnswerOutcome {
+  ANSWERED
+  REFUSED
+  ERROR
+}
+
 model User {
   id          String                   @id @default(uuid()) @db.Uuid
   email       String                   @unique
@@ -289,6 +295,24 @@ model KnowledgeChunk {
   @@unique([versionId, ordinal])
   @@index([versionId])
   @@map("knowledge_chunks")
+}
+
+model SupportAnswerTrace {
+  id              String               @id @db.Uuid
+  questionHash    String               @map("question_hash")
+  evidenceIds     Json                 @map("evidence_ids")
+  configuration   Json
+  provider        String
+  model           String
+  outcome         SupportAnswerOutcome
+  refusalReason   String?              @map("refusal_reason")
+  citationCount   Int                  @map("citation_count")
+  latencyMs       Int                  @map("latency_ms")
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([outcome])
+  @@map("support_answer_traces")
 }
 
 model SupportTicket {

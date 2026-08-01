@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, retrieval answer, or server account-tool/ticket-mutation integration is connected to that UI. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence. Separately, fixed API-only account tools and a confirmed synthetic support-handoff flow are documented in [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md); later integration may use only that narrow server-authorized seam.
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, retrieval answer, or server account-tool/ticket-mutation integration is connected to that UI. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence. Separately, the backend has an optional local-only, evidence-grounded Qwen generation API and fixed API-only account tools with a confirmed synthetic support-handoff flow; those capabilities remain separate from the UI and from each other until a later authorized integration. See [`docs/GENERATION.md`](docs/GENERATION.md) and [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md).
 
 ## Zero-cost scope
 
@@ -12,6 +12,7 @@ Everything runs locally with open-source tools and no account, secret, billing d
 - Next.js and NestJS
 - Prisma and PostgreSQL 16 with open-source pgvector
 - Local `Xenova/all-MiniLM-L6-v2` embeddings through `@huggingface/transformers` (intentional first-run public download; no API key)
+- Optional local Ollama `qwen3:4b` grounded generation (explicit model pull only; no hosted API, account, or key)
 - Jest, Vitest, and Playwright
 
 Fictional subscription rows never trigger billing. GitHub Actions is included for free public-repository CI; local commands remain authoritative and CI availability depends on GitHub's public-repository runner policy.
@@ -156,12 +157,16 @@ RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api 
 
 Normal CI and unit tests do not download model weights. MiniLM requires the repository-pinned Node 22 runtime; if the runtime/cache/network/model is unavailable, ingestion/search fails honestly and a new source version is not activated. Full instructions, model integrity evidence, and the versioned retrieval gold set are in [`docs/RAG.md`](docs/RAG.md).
 
+## Optional grounded generation backend
+
+The API can use a deliberately started local Ollama `qwen3:4b` service to answer only from active public-corpus evidence. It validates every model citation server-side before returning a final answer, refuses weak evidence before model calls, and returns an honest error when the local service/model is unavailable. Streaming uses final validated SSE events only; no UI is wired to it. See [`docs/GENERATION.md`](docs/GENERATION.md) for the explicit zero-cost Docker profile/model pull, configuration, contracts, security boundary, smoke procedure, resource expectations, and validation.
+
 ## Remaining milestones—not completed claims
 
 The support and Knowledge transport in this milestone is explicitly a UI preview. Its fixtures are not production behavior or customer outcomes.
 
-1. Local grounded answer generation and UI/runtime citations (future Qwen/Ollama work; not present).
-2. Grounded runtime citations and a separately reviewed local model/UI integration for the fixed account-tool seam.
+1. Product UI/runtime integration for the grounded-generation API.
+2. A separately reviewed local model/UI integration for the fixed account-tool and handoff seam; generation itself has no account tools.
 3. Production authentication/security review.
 4. Deployment and portfolio evidence only after those capabilities genuinely exist.
 

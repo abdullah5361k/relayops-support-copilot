@@ -1,4 +1,5 @@
 services:
+  # Default path: database only. The optional ollama profile never pulls a model by itself.
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -16,5 +17,21 @@ services:
       timeout: 5s
       retries: 10
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      # Choose RELAYOPS_OLLAMA_PORT explicitly if this local loopback port is occupied.
+      - "127.0.0.1:${RELAYOPS_OLLAMA_PORT:-11435}:11434"
+    volumes:
+      - relayops_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   relayops_postgres:
+  # Model blobs live in this local Docker volume, never in git or normal CI.
+  relayops_ollama:

@@ -152,3 +152,56 @@ export interface HandoffCancellationResult {
 export type AccountToolReadResult = SubscriptionSeatUsageResult | JobStatusToolResult | SupportTicketStatusToolResult;
 export type AccountToolErrorCode = 'invalid_argument' | 'not_found' | 'invalid_draft' | 'draft_expired' | 'draft_cancelled';
 export interface AccountToolError { kind: 'error'; code: AccountToolErrorCode; }
+
+/** Public-corpus support generation contracts. Session details, if present, are server-owned. */
+export type SupportAnswerState = 'ANSWERED' | 'REFUSED' | 'ERROR';
+export type SupportRefusalReason =
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'UNSUPPORTED_GENERATION'
+  | 'INVALID_MODEL_OUTPUT'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_TIMEOUT'
+  | 'RETRIEVAL_UNAVAILABLE'
+  | 'CANCELLED';
+
+export interface SupportAnswerRequest {
+  question: string;
+  /** Reserved for a future server-derived session context. Callers must not supply account data. */
+  session?: { authenticated: boolean; extension?: Record<string, never> };
+}
+
+export interface SupportCitation {
+  evidenceId: string;
+  sourceLogicalId: string;
+  sourceTitle: string;
+  heading: string | null;
+  section: string | null;
+  page: number | null;
+  anchor: string | null;
+}
+
+export interface SupportProviderStatus {
+  provider: 'ollama';
+  model: 'qwen3:4b';
+  available: boolean;
+}
+
+export interface SupportAnswerResponse {
+  traceId: string;
+  state: SupportAnswerState;
+  answer: string | null;
+  citations: SupportCitation[];
+  refusalReason: SupportRefusalReason | null;
+  suggestedTopics: string[];
+  provider: SupportProviderStatus;
+  /** Intentionally empty: account-tool and handoff use their separately authorized contracts. */
+  extension: Record<string, never>;
+}
+
+export type SupportStreamEvent =
+  | { type: 'lifecycle'; traceId: string; stage: 'retrieving' | 'generating' | 'complete' }
+  | { type: 'status'; traceId: string; provider: SupportProviderStatus }
+  | { type: 'answer'; traceId: string; answer: string }
+  | { type: 'citations'; traceId: string; citations: SupportCitation[] }
+  | { type: 'refusal'; traceId: string; reason: SupportRefusalReason; suggestedTopics: string[] }
+  | { type: 'error'; traceId: string; reason: SupportRefusalReason; message: string };
