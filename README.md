@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge now use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, account tool, ticket mutation, or retrieval answer is connected. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence.
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, retrieval answer, or server account-tool/ticket-mutation integration is connected to that UI. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence. Separately, fixed API-only account tools and a confirmed synthetic support-handoff flow are documented in [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md); later integration may use only that narrow server-authorized seam.
 
 ## Zero-cost scope
 
@@ -98,6 +98,12 @@ GET    /api/team                  protected technicians
 GET    /api/customers[/:id]       protected customers
 GET    /api/subscription          protected plan/seat usage
 GET    /api/support/tickets       protected tickets
+GET    /api/account-tools/subscription-seat-usage  protected fixed tool
+GET    /api/account-tools/jobs/:reference/status   protected fixed tool
+GET    /api/account-tools/tickets/:reference/status protected fixed tool
+POST   /api/account-tools/handoffs/preview         protected consent preview
+POST   /api/account-tools/handoffs/confirm         protected consent confirmation
+POST   /api/account-tools/handoffs/cancel          protected consent cancellation
 ```
 
 For direct API diagnostics, create a cookie jar with curl:
@@ -155,7 +161,7 @@ Normal CI and unit tests do not download model weights. MiniLM requires the repo
 The support and Knowledge transport in this milestone is explicitly a UI preview. Its fixtures are not production behavior or customer outcomes.
 
 1. Local grounded answer generation and UI/runtime citations (future Qwen/Ollama work; not present).
-2. Narrow authorized account tools and grounded runtime citations.
+2. Grounded runtime citations and a separately reviewed local model/UI integration for the fixed account-tool seam.
 3. Production authentication/security review.
 4. Deployment and portfolio evidence only after those capabilities genuinely exist.
 
