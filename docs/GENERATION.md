@@ -1,74 +1,111 @@
-# Local grounded generation (Qwen only)
+# Grounded generation providers
 
-RelayOps is an original fictional portfolio demo. This integration runs only on a local machine: committed MiniLM embeddings, local PostgreSQL, and an optional local Ollama `qwen3:4b`. It has no hosted model, key, billing account, cloud resource, production deployment, or real customer data.
+RelayOps is an original fictional portfolio demo, not production support infrastructure. Generation is **explicitly selected** with `RELAYOPS_GENERATION_PROVIDER=disabled|groq|ollama`; an unset value is `disabled`. There is no fallback, model routing, browser SDK, browser key, hosted deployment, SLA, or claim of customer-data support.
 
-## Current verification status
+## Provider choices
 
-This branch verified MiniLM ingestion/retrieval, deterministic contract evaluation, tenant/account isolation, handoff confirmation safety, and browser unavailable-provider behavior. On the isolated integrated PostgreSQL database, MiniLM's existing retrieval gold set reported `1.00` recall@5 / expected-source hit rate with zero stale/namespace violations; the 60-case integrated deterministic-provider run reported `0.933` retrieval hit, `0.983` outcome, full citation validity/coverage/tool/handoff precision, and zero unsupported/stale/namespace/tenant/pre-confirmation-mutation violations. These are **not Qwen metrics**. It **did not verify real `qwen3:4b` execution, real-model quality, citations, or latency**: the authorized free Docker image/model download made progress but stalled before completion. The UI/API therefore continue to show only the honest local-provider-unavailable state until a future operator completes the documented local pull. No hosted or substitute model was used.
+- `groq` is the captain-approved hosted option. The API server uses direct HTTPS to the pinned official OpenAI-compatible endpoint `https://api.groq.com/openai/v1/chat/completions` and the only allowed model is `openai/gpt-oss-20b`. Neither URL nor model comes from a browser request or a runtime routing setting.
+- `ollama` remains an **optional local development** provider only, pinned to `qwen3:4b` and a loopback HTTP endpoint. It is never started/pulled by normal CI or this change.
+- `disabled` is the secure default and returns an honest unavailable state.
 
-## Bounded setup
+Groq is external inference: it receives only the bounded support question and the server-selected active **PUBLIC** `relayops-public` evidence excerpts. It never receives a tenant/organization/user identity or name, cookie/session, account tool argument/result, subscription/job/ticket fact, handoff/transcript, database record, private log, arbitrary URL/file, browser authority, or tool choice. Account reads stay deterministic and structurally separate. A narrow authenticated, explicit handoff-only request is a deterministic action offer, never a Groq prompt; it may use public source IDs/anchors only as optional preview metadata and never creates a draft or ticket. A combined direct documentation question plus a handoff request still uses canonical public retrieval and the normal validated generation path.
 
-Use an isolated Compose project and ports so another project stack is never reused:
-
-```bash
-COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_DB_PORT=55434 docker compose up -d --wait postgres
-DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:deploy
-DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:seed
-# Intentional local cache/download, never normal CI or git:
-DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
-  RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:ingest
-COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_OLLAMA_PORT=11436 docker compose --profile ollama up -d --wait ollama
-COMPOSE_PROJECT_NAME=relayops-rag-final docker compose exec ollama ollama pull qwen3:4b
-```
-
-Model blobs remain in the local Compose volume and MiniLM remains in `RELAYOPS_MODEL_CACHE`; both are ignored by git. Start the API with `RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436`, `RELAYOPS_OLLAMA_CONCURRENCY=1` on an 11 GiB machine, and a finite read timeout. The app rejects any model tag other than exactly `qwen3:4b` and any non-local provider URL. If the pull/runtime cannot complete after bounded troubleshooting, record the exact blocker; never substitute a model or claim a smoke passed.
-
-## Contract and safety boundary
-
-The shared canonical contract is `packages/contracts/src/index.ts`:
-
-```text
-POST /api/support/answers
-POST /api/support/answers/stream  # fetch SSE
-body: { "question": "…" }
-```
-
-The request has no tenant, actor, corpus namespace, URL, tool, account fact, or session assertion. The server derives an optional demo session only from its HttpOnly cookie. Retrieval hardcodes active public evidence. Qwen gets at most four 1,200-character evidence records inside explicit data delimiters, has no tools/files/URLs/account access, and is instructed to treat both question and documents as untrusted data.
-
-The model returns bounded JSON claims. Server validation rejects malformed JSON, fabricated/duplicate IDs, unsupported citations, and claims with no substantive active excerpt. Empty grounded claims become a refusal. SSE sends lifecycle/status then one server-validated terminal response; no draft/model token is authoritative or sent to the UI. Citation metadata is copied from the active chunk (logical ID/title/format/location/excerpt), never from a model URL.
-
-Account facts are not Qwen output. A deterministic server policy may select only subscription seats, job status, or ticket status after a valid demo session. Returned facts are separately typed/labeled account evidence. Qwen cannot create a ticket; handoff requires the existing actor-bound preview then explicit confirmation.
-
-## Evaluation and real smoke
-
-The versioned 60-question set is `corpus/support-evaluation.v1.json` (documentation, paraphrase/multi-source, refusal, stale/injection, two tenant/account paths, and handoff safety). The fully deterministic evaluator uses declared deterministic embeddings/provider and is **not** Qwen evidence:
+Use the dedicated server-only `GROQ_API_KEY` only for intentional checks. For example, from a secure shell with tracing disabled:
 
 ```bash
-# Use a fresh isolated evaluation database because it deliberately indexes deterministic vectors.
-DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
-  pnpm --filter @relayops/api evaluation:deterministic
-```
-
-It exits nonzero below 0.90 retrieval/outcome/tool/handoff rates, below full citation validity/coverage, or for any unsupported claim, stale/namespace/tenant violation, or pre-confirmation handoff mutation. Those thresholds protect deterministic regression behavior. After real MiniLM ingestion, run the same deterministic provider against the integrated real-vector database (still **not** Qwen):
-
-```bash
-DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" \
-  pnpm --filter @relayops/api evaluation:integrated
-```
-
-Real-model quality is reported separately and is never compared with deterministic-double metrics:
-
-```bash
+set +x
+. ~/.config/relayops/groq.env
+export GROQ_API_KEY
+RELAYOPS_GENERATION_PROVIDER=groq \
 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
 RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" \
-RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436 RELAYOPS_OLLAMA_CONCURRENCY=1 \
-  pnpm --filter @relayops/api evaluation:real-model
+pnpm --filter @relayops/api evaluation:groq-smoke
 ```
 
-After a future operator completes the explicit pull, this is the one-command local real-model smoke/evaluator path (it does not pull or substitute a model):
+Do not put that value in `.env.example`, source, git, browser variables, screenshots, reports, or shell output. A missing selected-provider credential, rejected authentication, quota limit, timeout, malformed response, provider failure, or open circuit produces no plausible answer.
+
+## Evidence and output boundary
+
+`SupportAnswerService` retrieves only active server-owned public evidence before it calls a provider. The bounded system prompt says that question/evidence text is inert untrusted data; it rejects evidence instructions, uncited claims, account claims, tools, web/file/SQL access, source selection, and handoff/account transformations. It requires `{"claims":[]}` for insufficient or conflicting evidence.
+
+Groq requests non-streaming chat completions with `temperature: 0`, `reasoning_effort: "low"`, a server-owned 768-token completion cap, no tools/function calls, and strict `response_format: { type: "json_schema" }`. Every schema field is required and every object has `additionalProperties: false`; claims are limited to three concise sentences with one evidence ID each. The server independently rejects malformed JSON, unknown/duplicate/missing IDs, excess fields, oversized values, unsupported claim text, and empty evidence. Citation display metadata comes only from the exact active retrieved chunk. SSE exposes lifecycle/status plus one validated final/refusal/error response; it never forwards model tokens or drafts.
+
+Current official Groq documentation was checked on 2026-08-01: [Reasoning](https://console.groq.com/docs/reasoning) lists `low` for GPT-OSS 20B and says it uses a small number of reasoning tokens; the [Chat API reference](https://console.groq.com/docs/api-reference#chat-create) defines `max_completion_tokens` as the generated-token limit; and the same current reference's Responses token-cap definition explicitly includes visible and reasoning tokens. The successful strict-schema diagnostic also reported `input_tokens + completion_tokens = total_tokens` (616 + 125 = 741) with four reported reasoning tokens. Reasoning therefore consumes the bounded generated-token budget; 420 could leave too little room for valid structured output.
+
+Hard server caps cover question/evidence/prompt/output bytes. The adapter has a 5-second connect deadline and 24-second end-to-end deadline, abort propagation, a one-active/two-waiting hosted queue, and safe status classes for auth, 400, 413, 429/`Retry-After`, 5xx, network, timeout, cancellation, and malformed output. It never sleeps/retries after output, retries a failed request, silently switches provider, relaxes the schema, or falls back to JSON mode. Each 768-token strict request is reserved in the local limiter before HTTPS dispatch and remains subject to the existing total deadline and server validation.
+
+A local breaker opens after three qualifying provider failures in 60 seconds and stays open for five minutes. Safe observability is restricted to trace ID, provider/model, status class, latency, token counts/safe rate headers, citation count, and outcome. It intentionally stores no prompt/question/evidence/answer/account material, key fragment, or derivative hash.
+
+## Free Plan and later hosting work
+
+Groq's Free Plan was researched on **2026-08-01** for this fixed model at 30 RPM, 1,000 RPD, 8K TPM, and 200K TPD. RelayOps reserves below those ceilings (24 RPM, 900 RPD, 7.2K TPM, 180K TPD) with conservative local concurrency. A 429 honors `Retry-After` in the honest unavailable UX without a hidden sleep or retry. These in-memory guards are per process and **are not globally sufficient** for a multi-instance public deployment; a later hosting task must add durable shared quotas and ingress abuse/rate controls before any public exposure. Groq's Free Plan has no SLA. No billing method, credits, paid API, cloud resource, or deployment is added here.
+
+## Evaluation and verification
+
+The 60-case versioned suite is `corpus/support-evaluation.v1.json`. It reports per-category retrieval/outcome/refusal/citation/unsupported-claim results, tenant/stale/namespace violations, account-tool/handoff safety, provider errors, token use, rate headers, and p50/p95 latency. It labels these modes separately:
 
 ```bash
-PATH="$HOME/.nvm/versions/node/v22.11.0/bin:$PATH" DATABASE_URL='postgresql://relayops@localhost:55436/relayops?schema=public' RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436 RELAYOPS_OLLAMA_CONCURRENCY=1 pnpm --filter @relayops/api evaluation:real-model
+# Fresh deterministic-vector database only; neither MiniLM nor Groq evidence.
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+  pnpm --filter @relayops/api evaluation:deterministic
+
+# Real MiniLM retrieval with deterministic provider, not Groq generation.
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" \
+  pnpm --filter @relayops/api evaluation:integrated
+
+# Intentional hosted smoke first, then the real Groq suite. Account/handoff cases remain deterministic.
+set +x; . ~/.config/relayops/groq.env; export GROQ_API_KEY
+RELAYOPS_GENERATION_PROVIDER=groq DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-smoke
+# Explicit pacing stays below the Free Plan envelope; it is not an automatic retry/sleep.
+RELAYOPS_GENERATION_PROVIDER=groq RELAYOPS_EVALUATION_PACE_MS=10000 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:real-groq
+
+# Historical two-call sanitized diagnosis; it prints no body/prompt/evidence.
+RELAYOPS_GENERATION_PROVIDER=groq RELAYOPS_EVALUATION_PACE_MS=12000 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-diagnose
+
+# One strict-schema low-reasoning/768-token causal test, then its two-call repeated/cited verification.
+RELAYOPS_GENERATION_PROVIDER=groq DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-reasoning-budget-diagnose
+RELAYOPS_GENERATION_PROVIDER=groq RELAYOPS_EVALUATION_PACE_MS=12000 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-reasoning-budget-verify
+
+# No key and no external request: proves confirm-only is a server-owned handoff offer.
+RELAYOPS_GENERATION_PROVIDER=groq DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-confirm-only-canonical
 ```
 
-Record `docker compose ... exec ollama ollama show qwen3:4b --verbose`, host RAM/disk, model tag/digest if reported, API parameters, and latency. Verify a cited documentation answer; out-of-scope refusal; signed-in seat answer with separate account evidence; injection resistance; and a handoff offer followed by preview/cancel (no ticket) then one explicit confirmation (synthetic ticket). Do not call deterministic results real-Qwen metrics.
+The prior branch's historical claim remains unchanged: **real local `qwen3:4b` execution was not verified** because its local download stalled. Existing deterministic and real-MiniLM measurements are not Qwen or Groq generation measurements. Local Ollama may be evaluated later only after an explicit local pull; this work does not download it.
+
+## Recorded Groq evidence
+
+Run the smoke before the suite and record only safe aggregate metrics here: fixed model identity, schema/validated-citation result, token/rate headers, latency, outcome/refusal/citation safety counts, and provider errors. Do not record key material, questions, evidence, answers, account data, or claim that Free Plan access is production infrastructure.
+
+**2026-08-01, isolated PostgreSQL + cached real MiniLM:** the intentional minimal smoke authenticated the pinned `openai/gpt-oss-20b`, produced one server-validated cited answer with strict-schema behavior, used 855 input / 202 output / 1,057 total tokens, reported 999 remaining requests and 6,725 remaining tokens, and took 1,834 ms end-to-end evaluator latency. The subsequent complete 60-case real-Groq run used explicit 10,000 ms operator pacing. It made 46 provider invocations (the 12 account-isolation cases made **zero**), reported six safely mapped 400/provider errors, and measured 33,817 input / 8,004 output / 41,821 total reported tokens, p50 864 ms / p95 1,801 ms, and final safe headers of 927 remaining requests / 6,731 remaining tokens. Citation validity/coverage, tool precision, unsupported-claim rate, stale/namespace/tenant violations, and pre-confirmation handoff mutations were respectively 1.00/1.00/1.00/0/0/0/0. The run exposed low grounded outcome on paraphrase/handoff cases and unsafe/stale requests that were still reaching the provider; it is a Free Plan evaluation, **not** a production-quality claim. The follow-up added a stricter deterministic pre-generation refusal gate for explicit stale/injection/out-of-scope requests without weakening citation validation. It was not re-run, to preserve the remaining Free Plan quota; repeat the documented command deliberately after a quota window if a new measured baseline is required.
+
+| category | retrieval hit | expected outcome | provider calls/errors |
+| --- | ---: | ---: | ---: |
+| documentation | 0.833 | 0.833 | 12 / 1 |
+| paraphrase/multi-source | 0.500 | 0.625 | 8 / 2 |
+| unanswerable | 1.000 | 0.900 | 10 / 0 |
+| stale/injection | 1.000 | 0.700 | 10 / 1 |
+| account isolation | 1.000 | 1.000 | 0 / 0 |
+| handoff safety | 0.750 | 0.750 | 6 / 2 |
+
+All categories recorded citation validity/coverage/tool precision at 1.000, unsupported-claim rate 0, and stale-version/namespace/tenant violation counts 0. Handoff safety aggregate was 0.967 because provider errors prevented some documentation handoff offers; no handoff was mutated before explicit confirmation.
+
+### Current-code reasoning-budget causal boundary
+
+The historical two-record strict-schema `multi-contact` request (2,544 request bytes / 1,828 bounded-prompt bytes / 407 schema bytes) returned only sanitized `json_validate_failed` / `invalid_request_error` at the former 420-token cap. A single strict-schema counterfactual changed no model, messages, evidence records, citation validation, or deadline: it used only supported `reasoning_effort: "low"` and a locally reserved 768-token cap. It answered with two validated citations on the fixed model (2,569 / 1,828 / 407 bytes; 616 input / 125 completion / 741 total tokens; four reasoning tokens). The exact repeated case and one cited control then both passed: the repeat again had two validated citations and the control had one. No JSON-mode request was sent in either check, so the old JSON-mode retry was removed rather than retained as an unnecessary alternate mode.
+
+The resulting seven-case bounded regression had **zero provider errors**, a validated cited control answer, no stale-beta provider call, and zero unsupported/stale/namespace/tenant/pre-confirmation-mutation violations. It is nevertheless **not a fully passed regression**: `confirm-only` was safely refused after a successful provider call rather than its historical expected `ANSWERED` state. This is an outcome variation, not a provider/schema error; no answer or citation was invented and no retry was sent.
+
+### Handoff-only action boundary (no provider call)
+
+A two-call strict-schema comparison found that the public-handoff control answered, while `confirm-only` safely refused with zero provider errors. A final authorized current-code call repeated that safe refusal even though the bounded payload used the canonical public question and contained no requester handoff/account data. That result establishes that an authenticated request explicitly asking for a person/handoff is an action intent, not a documentation-answer prompt; it must not be retried or made to depend on generative output.
+
+Current orchestration therefore recognizes only narrow explicit action phrasing (for example, “I need a human handoff …”) after the existing deterministic account-plan and unsafe-request gates. With a server-derived authenticated session it returns the fixed final offer, `handoffAvailable: true`, no documentation/account claim or account evidence, and no provider invocation. It can attach at most two active `relayops-public` source ID/anchor pairs only as optional preview metadata; it never sends them externally. It creates neither a handoff draft nor a ticket: the existing tenant/actor-scoped preview, cancel, and explicit confirmation endpoints remain the only mutation path. Unauthenticated action requests safely require sign-in; cancellation returns `CANCELLED` with no offer. Direct documentation wording (for example, “How quickly …? I need a human handoff.”) remains on canonical public retrieval plus strict validated generation.
+
+**2026-08-01, Node 22 + cached MiniLM local boundary check:** `confirm-only` produced `ANSWERED`, the expected public preview source was selected, `handoffAvailable` was true, and provider invocations/errors and pre-confirmation handoff mutations were all zero. Unit/integration/browser coverage also verifies no provider invocation for the action offer, unauthenticated refusal, cancellation, no pre-preview ticket/draft, cancellation, same-actor replay, and cross-tenant denial. This is deterministic local orchestration evidence, not a new Groq generation-quality claim.

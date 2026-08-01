@@ -60,7 +60,7 @@ test('direct protected navigation without a session returns to demo entry', asyn
   await expect(page.getByRole('heading', { name: 'Choose an identity' })).toBeVisible();
 });
 
-test('live same-origin support separates account evidence, reports Qwen unavailable, and confirms synthetic handoff only after review', async ({ page }) => {
+test('live same-origin support separates account evidence, offers handoff-only actions without generation, and confirms synthetic handoff only after review', async ({ page }) => {
   await signIn(page, /Maya at Northstar HVAC/);
   await page.goto('/dashboard/support');
   const input = page.getByRole('textbox', { name: /ask a support question/i });
@@ -77,9 +77,18 @@ test('live same-origin support separates account evidence, reports Qwen unavaila
   await page.getByRole('button', { name: /confirm and create synthetic ticket/i }).click();
   await expect(page.getByText(/Synthetic ticket confirmed/i)).toBeVisible();
   await page.getByRole('button', { name: /try another question/i }).click();
+  await input.fill('I need a human handoff about urgent incident acknowledgement.');
+  await page.getByRole('button', { name: 'Send question' }).click();
+  await expect(page.getByText(/A synthetic handoff can be prepared for your review/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /prepare handoff for review/i })).toBeVisible();
+  await page.getByRole('button', { name: /prepare handoff for review/i }).click();
+  await expect(page.getByRole('region', { name: /handoff confirmation/i })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('region', { name: /handoff confirmation/i })).toHaveCount(0);
+  await page.getByRole('button', { name: /try another question/i }).click();
   await input.fill('How quickly is a confirmed urgent interruption acknowledged?');
   await page.getByRole('button', { name: 'Send question' }).click();
-  await expect(page.locator('.state-message.failure')).toContainText(/Local Qwen unavailable|No validated answer/i);
+  await expect(page.locator('.state-message.failure')).toContainText(/Generation provider unavailable|No validated answer/i);
 });
 
 test('owner Knowledge console reads active local state, searches evidence, and only reindexes a committed source', async ({ page }) => {

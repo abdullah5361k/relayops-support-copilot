@@ -13,7 +13,11 @@ function cleanQuestion(value: unknown): string {
   if (!question || question.length > MAX_QUESTION) throw new Error('Use a question between 1 and 1000 characters.');
   return question;
 }
-function isProvider(value: unknown): boolean { return !!value && typeof value === 'object' && (value as { provider?: unknown }).provider === 'ollama' && (value as { model?: unknown }).model === 'qwen3:4b' && typeof (value as { available?: unknown }).available === 'boolean'; }
+function isProvider(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || typeof (value as { available?: unknown }).available !== 'boolean') return false;
+  const provider = (value as { provider?: unknown }).provider; const model = (value as { model?: unknown }).model;
+  return (provider === 'groq' && model === 'openai/gpt-oss-20b') || (provider === 'ollama' && model === 'qwen3:4b') || (provider === 'disabled' && model === 'disabled');
+}
 function isStreamEvent(value: unknown): value is SupportStreamEvent {
   if (!value || typeof value !== 'object' || typeof (value as { type?: unknown }).type !== 'string') return false;
   const event = value as Partial<SupportStreamEvent> & { type: string };
@@ -65,7 +69,7 @@ export class ApiRagClient implements RagClient {
         if (event.stage === 'complete') complete = true;
         if (event.stage === 'planning') return { type: 'phase', phase: 'pending', label: 'Resolving the safe request plan' };
         if (event.stage === 'retrieving') return { type: 'phase', phase: 'retrieving', label: 'Checking active public evidence' };
-        if (event.stage === 'generating') return { type: 'phase', phase: 'generating', label: 'Validating a local Qwen answer' };
+        if (event.stage === 'generating') return { type: 'phase', phase: 'generating', label: 'Generating and validating an evidence-backed answer' };
         return null;
       }
       if (event.type === 'status') { if (!traceId || event.traceId !== traceId || terminal) throw new Error('Out-of-order SSE status.'); return null; }

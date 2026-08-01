@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AccountToolModule } from '../account-tools/account-tool.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { OllamaQwenProvider } from './generation.provider';
+import { createGenerationProvider } from './generation.provider';
 import { SUPPORT_EMBEDDER, SUPPORT_GENERATION_PROVIDER, SupportAnswerService } from './support-answer.service';
 import { MiniLmEmbeddingProvider } from '../knowledge/embeddings';
 import { SupportController } from './support.controller';
@@ -12,7 +12,7 @@ import { SupportController } from './support.controller';
   controllers: [SupportController],
   providers: [
     { provide: SUPPORT_EMBEDDER, useFactory: () => new MiniLmEmbeddingProvider() },
-    { provide: SUPPORT_GENERATION_PROVIDER, useFactory: () => new OllamaQwenProvider() },
+    { provide: SUPPORT_GENERATION_PROVIDER, useFactory: () => createGenerationProvider() },
     SupportAnswerService
   ]
 })

@@ -298,17 +298,21 @@ model KnowledgeChunk {
 }
 
 model SupportAnswerTrace {
-  id              String               @id @db.Uuid
-  questionHash    String               @map("question_hash")
-  evidenceIds     Json                 @map("evidence_ids")
-  configuration   Json
-  provider        String
-  model           String
-  outcome         SupportAnswerOutcome
-  refusalReason   String?              @map("refusal_reason")
-  citationCount   Int                  @map("citation_count")
-  latencyMs       Int                  @map("latency_ms")
-  createdAt       DateTime             @default(now()) @map("created_at")
+  id                  String               @id @db.Uuid
+  provider            String
+  model               String
+  outcome             SupportAnswerOutcome
+  refusalReason       String?              @map("refusal_reason")
+  statusClass         String               @map("status_class")
+  citationCount       Int                  @map("citation_count")
+  latencyMs           Int                  @map("latency_ms")
+  inputTokens         Int?                 @map("input_tokens")
+  outputTokens        Int?                 @map("output_tokens")
+  totalTokens         Int?                 @map("total_tokens")
+  remainingRequests   Int?                 @map("remaining_requests")
+  remainingTokens     Int?                 @map("remaining_tokens")
+  retryAfterSeconds   Int?                 @map("retry_after_seconds")
+  createdAt           DateTime             @default(now()) @map("created_at")
 
   @@index([createdAt])
   @@index([outcome])

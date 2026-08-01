@@ -3,7 +3,7 @@ import type { HandoffPreviewInput, KnowledgeReindexResponse, KnowledgeSearchHit,
 import type { RagClient, RagScenario, RagStreamEvent } from './rag-contracts';
 
 const citation = { evidenceId: 'fixture-active-chunk', sourceLogicalId: 'dispatch-basics', sourceTitle: 'Dispatch basics', sourceType: 'html' as const, heading: 'Acknowledging an urgent job', section: null, page: 2, anchor: 'urgent-job', excerpt: 'A dispatcher should acknowledge an urgent job before assigning the next available technician.' };
-const answer = (state: SupportAnswerResponse['state'], text: string | null, reason: SupportAnswerResponse['refusalReason'] = null): SupportAnswerResponse => ({ traceId: 'mock-trace', state, answer: text, citations: text ? [citation] : [], accountEvidence: [], accountToolPlan: null, handoffAvailable: false, refusalReason: reason, suggestedTopics: ['Dispatch basics'], provider: { provider: 'ollama', model: 'qwen3:4b', available: state === 'ANSWERED' } });
+const answer = (state: SupportAnswerResponse['state'], text: string | null, reason: SupportAnswerResponse['refusalReason'] = null): SupportAnswerResponse => ({ traceId: 'mock-trace', state, answer: text, citations: text ? [citation] : [], accountEvidence: [], accountToolPlan: null, handoffPreviewEvidence: [], handoffAvailable: false, refusalReason: reason, suggestedTopics: ['Dispatch basics'], provider: { provider: 'ollama', model: 'qwen3:4b', available: state === 'ANSWERED' } });
 
 export class MockRagClient implements RagClient {
   async *streamAnswer({ question }: { question: string }, signal?: AbortSignal): AsyncIterable<RagStreamEvent> {

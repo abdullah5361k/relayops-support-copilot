@@ -78,6 +78,29 @@ integration('real PostgreSQL tenant-safe account tools and consent handoff', () 
     expect(await missing.json()).toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_REFERENCE_UNAVAILABLE' });
   });
 
+  it('offers an authenticated handoff-only action without a provider call, draft, or ticket before review', async () => {
+    const north = await signIn('northstar-owner'); const prime = await signIn('primeflow-owner');
+    const beforeTickets = await prisma.supportTicket.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } });
+    const beforeDrafts = await prisma.handoffDraft.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } });
+    const offer = await post('/support/answers', north, { question: 'I need a human handoff about urgent incident acknowledgement.' });
+    const body = await offer.json() as { state: string; answer: string; citations: unknown[]; accountEvidence: unknown[]; handoffAvailable: boolean; handoffPreviewEvidence: Array<{ sourceId: string; locator?: string }> };
+    expect(offer.status).toBe(200); expect(body).toMatchObject({ state: 'ANSWERED', answer: 'A synthetic handoff can be prepared for your review. No ticket has been created.', citations: [], accountEvidence: [], handoffAvailable: true });
+    expect(Array.isArray(body.handoffPreviewEvidence)).toBe(true);
+    expect(await prisma.handoffDraft.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } })).toBe(beforeDrafts);
+    expect(await prisma.supportTicket.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } })).toBe(beforeTickets);
+
+    const unauthenticated = await fetch(`${base}/support/answers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: 'I need a human handoff about urgent incident acknowledgement.' }) });
+    expect(await unauthenticated.json()).toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_SIGN_IN_REQUIRED', handoffAvailable: false });
+
+    const preview = await (await post('/account-tools/handoffs/preview', north, { summary: 'Handoff-only offer', documentationEvidence: body.handoffPreviewEvidence, conversationExcerpt: body.answer })).json() as { draftId: string };
+    expect(await prisma.supportTicket.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } })).toBe(beforeTickets);
+    const foreignConfirm = await post('/account-tools/handoffs/confirm', prime, { draftId: preview.draftId });
+    expect(foreignConfirm.status).toBe(409); expect(await foreignConfirm.json()).toEqual({ kind: 'error', code: 'invalid_draft' });
+    expect(await (await post('/account-tools/handoffs/cancel', north, { draftId: preview.draftId })).json()).toEqual({ kind: 'handoff_cancelled', draftId: preview.draftId, cancelled: true });
+    expect(await (await post('/account-tools/handoffs/confirm', north, { draftId: preview.draftId })).json()).toEqual({ kind: 'error', code: 'draft_cancelled' });
+    expect(await prisma.supportTicket.count({ where: { organizationId: '10000000-0000-4000-8000-000000000001' } })).toBe(beforeTickets);
+  });
+
   it('rejects malformed and authority-bearing bodies, ignores headers, and rejects missing or inactive sessions', async () => {
     const north = await signIn('northstar-owner');
     expect((await get('/account-tools/jobs/not-a-reference/status', north)).status).toBe(400);
