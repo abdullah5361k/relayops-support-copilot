@@ -25,7 +25,7 @@ export class KnowledgeRetrievalService {
       ORDER BY ts_rank_cd(to_tsvector('english', c.search_text), plainto_tsquery('english', ${text})) DESC, c.id LIMIT ${CANDIDATES}`);
     const fused = new Map<string, Evidence>();
     for (const [items, field] of [[semantic, 'semanticRank'], [keyword, 'keywordRank']] as const) for (const item of items) {
-      const current = fused.get(item.id) ?? { sourceLogicalId: item.logicalId, sourceTitle: item.title, content: item.content, heading: item.heading, section: item.section, page: item.page, anchor: item.anchor, score: 0 };
+      const current = fused.get(item.id) ?? { id: item.id, sourceLogicalId: item.logicalId, sourceTitle: item.title, content: item.content, heading: item.heading, section: item.section, page: item.page, anchor: item.anchor, score: 0 };
       current.score += 1 / (RRF_K + item.rank); Object.assign(current, { [field]: item.rank }); fused.set(item.id, current);
     }
     const ordered = [...fused.values()].sort((a, b) => b.score - a.score || a.sourceLogicalId.localeCompare(b.sourceLogicalId));

@@ -45,4 +45,4 @@ On Node 22.11.0, the cached Xenova fp32 `onnx/model.onnx` was 90,387,606 bytes w
 
 Every corpus file is original RelayOps fiction under this repository's MIT license. `field-visit-manual.pdf` is a minimal text-only PDF authored for this repository. `dispatcher-onboarding.docx` is a minimal Office Open XML ZIP authored with Python's standard `zipfile` module; neither artifact includes third-party material. Unsupported, malformed, empty, over-limit, scanned, encrypted, macro-executing, remote, and arbitrary local files are rejected/not offered.
 
-Next milestone: a separately reviewed local Qwen/Ollama grounded-generation layer may consume this evidence. It must not claim availability until Ollama is deliberately installed, tested, and cited answers are implemented.
+The separately bounded local Qwen/Ollama grounded-generation layer consumes this evidence only through the same server-owned namespace/active-version retrieval path. It does not alter the Phase 1 retrieval isolation rules; see [`GENERATION.md`](GENERATION.md) for its optional runtime, prompt/citation boundary, and failure behavior.
