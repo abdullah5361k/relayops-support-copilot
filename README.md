@@ -2,17 +2,18 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and tickets are database-backed deterministic demo data scoped by an HttpOnly demo session. Public help remains original local content. Support and Knowledge use a same-origin live local API adapter: active public-corpus retrieval, optional local Ollama `qwen3:4b` generation, browser/server citation validation, deterministic tenant-safe account read plans, confirmed synthetic handoff, and owner-only Knowledge inspection/reindex. A stopped/missing local model reports honestly; no fallback hosted model exists. **Real `qwen3:4b` execution was not verified for this branch because the free local image/model download stalled; no real-model quality, citation, or latency metric is claimed.** This is a fictional portfolio demo, **not production auth, deployment, customer support, billing, or service availability**. See [`docs/INTEGRATION.md`](docs/INTEGRATION.md), [`docs/GENERATION.md`](docs/GENERATION.md), and [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md).
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and tickets are database-backed deterministic demo data scoped by an HttpOnly demo session. Public help remains original local content. Support and Knowledge use same-origin APIs: active public-corpus retrieval, an explicitly selected server-only generator (`disabled`, optional hosted Groq `openai/gpt-oss-20b`, or optional local-development Ollama `qwen3:4b`), browser/server citation validation, deterministic tenant-safe account read plans, confirmed synthetic handoff, and owner-only Knowledge inspection/reindex. Groq is external inference of bounded public evidence, not production infrastructure; unavailable/missing credentials/quota/invalid output report honestly with no fallback. **Real local `qwen3:4b` execution was not verified because its local image/model download stalled; no Qwen quality, citation, or latency metric is claimed.** This is a fictional portfolio demo, **not production auth, deployment, customer support, billing, or service availability**. See [`docs/INTEGRATION.md`](docs/INTEGRATION.md), [`docs/GENERATION.md`](docs/GENERATION.md), and [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md).
 
 ## Zero-cost scope
 
-Everything runs locally with open-source tools and no account, secret, billing detail, cloud resource, or paid API:
+The default stack remains zero-cost and local: it needs no paid API, billing method, cloud resource, or external account. Optional hosted generation is disabled by default; an operator who intentionally selects Groq supplies their own server-only `GROQ_API_KEY`. The captain confirmed Groq activation required no credit card/payment method, but its Free Plan has no SLA and is not a deployment claim.
 
 - Node.js 22, pnpm, TypeScript
 - Next.js and NestJS
 - Prisma and PostgreSQL 16 with open-source pgvector
 - Local `Xenova/all-MiniLM-L6-v2` embeddings through `@huggingface/transformers` (intentional first-run public download; no API key)
-- Optional local Ollama `qwen3:4b` grounded generation (explicit model pull only; no hosted API, account, or key)
+- Optional Groq external inference, fixed to `openai/gpt-oss-20b`, only after explicit server configuration
+- Optional local-development Ollama `qwen3:4b` (explicit model pull only)
 - Jest, Vitest, and Playwright
 
 Fictional subscription rows never trigger billing. GitHub Actions is included for free public-repository CI; local commands remain authoritative and CI availability depends on GitHub's public-repository runner policy.
@@ -157,9 +158,9 @@ RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api 
 
 Normal CI and unit tests do not download model weights. MiniLM requires the repository-pinned Node 22 runtime; if the runtime/cache/network/model is unavailable, ingestion/search fails honestly and a new source version is not activated. Full instructions, model integrity evidence, and the versioned retrieval gold set are in [`docs/RAG.md`](docs/RAG.md).
 
-## Optional local Qwen integration
+## Optional grounded generation
 
-The browser uses the production same-origin `/api/support/answers/stream` adapter by default; no mock transport, scenario query parameter, or draft model token is used in production UI. The API optionally uses a deliberately started local Ollama `qwen3:4b` service to answer only from active public-corpus evidence. It validates every model citation server-side before returning a final answer, refuses weak evidence before model calls, and returns an honest error when the local service/model is unavailable. Account facts come only from fixed server-side tools and remain visually/contractually separate. Handoff preview/cancel/confirm uses the protected one-time synthetic-ticket flow. See [`docs/GENERATION.md`](docs/GENERATION.md) for explicit local model pull, resource expectations, evaluator, and smoke steps.
+The browser uses the same-origin `/api/support/answers/stream` adapter; it never contains a provider SDK/key or a model selector. The API accepts only `RELAYOPS_GENERATION_PROVIDER=disabled|groq|ollama`: `groq` pins server-side HTTPS to `openai/gpt-oss-20b`; `ollama` is explicit local-development-only `qwen3:4b`; `disabled` is the default. The generator receives only a bounded question and active public evidence. Every claim/citation is revalidated by the server before one final response; account facts remain fixed tenant-safe server-tool evidence and are never sent to a generator. See [`docs/GENERATION.md`](docs/GENERATION.md) for Free Plan/no-SLA limits, privacy boundary, circuit/failure behavior, smoke, and evaluator commands.
 
 ## Buyer verification and boundaries
 
@@ -174,9 +175,13 @@ COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_OLLAMA_PORT=11436 docker compos
 COMPOSE_PROJECT_NAME=relayops-rag-final docker compose exec ollama ollama pull qwen3:4b
 ```
 
-Then run the API/web with `RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436`, sign into either supplied synthetic identity, inspect a cited documentation answer, a refusal, separate seat evidence, and handoff preview/cancel before explicit confirmation. The owner Knowledge screen shows real local source/version/run/cache state and only committed-manifest reindex actions. Run `pnpm --filter @relayops/api evaluation:deterministic` on a fresh deterministic-vector database, and `evaluation:real-model` only after the local MiniLM/Qwen setup. Record actual model/runtime/digest/latency instead of treating deterministic doubles as Qwen evidence.
+For the optional local-development path only, run the API/web with `RELAYOPS_GENERATION_PROVIDER=ollama RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436`. For intentional hosted checks, set `RELAYOPS_GENERATION_PROVIDER=groq` and source the server-only key as documented in [`docs/GENERATION.md`](docs/GENERATION.md); never expose it to the browser. Sign into either supplied synthetic identity, inspect a cited documentation answer, a refusal, separate seat evidence, and handoff preview/cancel before explicit confirmation. The owner Knowledge screen shows real local source/version/run/cache state and only committed-manifest reindex actions. Run deterministic and real-MiniLM evaluations separately from the documented real-Groq smoke/suite; never treat deterministic doubles as Qwen or Groq evidence.
 
 There are no production authentication, real customer records, payment flows, real ticket delivery, deployment, GPS, dispatch optimization, mobile application, microservices, event bus, Kubernetes, or service availability claims in scope.
+
+## Portfolio/Fiverr wording
+
+Truthful wording: “RelayOps is a fictional multi-tenant support portfolio demo with server-validated public-documentation citations, deterministic synthetic account tools, and an optional server-side Groq `openai/gpt-oss-20b` evaluation path.” Do not describe Groq Free Plan access, demo authentication, synthetic data, or the unverified local Qwen path as production infrastructure, customer outcomes, SLA-backed service, deployment, or a paid/billed integration.
 
 ## License
 

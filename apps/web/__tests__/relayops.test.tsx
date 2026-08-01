@@ -19,7 +19,7 @@ describe("SupportChat", () => {
     const user = userEvent.setup();
     render(<SupportChat />);
     await user.click(screen.getByRole("button", { name: /open relay support/i }));
-    expect(screen.getByText(/local evidence and optional local qwen/i)).toBeInTheDocument();
+    expect(screen.getByText(/public evidence with a server-selected optional generator/i)).toBeInTheDocument();
     expect(screen.getByText(/answers are accepted only after/i)).toBeInTheDocument();
     expect(screen.getByText(/fictional demo/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /close support chat/i }));

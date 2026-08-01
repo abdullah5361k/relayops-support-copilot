@@ -23,7 +23,9 @@
     "knowledge:evaluate": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts evaluate",
     "evaluation:deterministic": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts deterministic",
     "evaluation:integrated": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts integrated",
-    "evaluation:real-model": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts real-model"
+    "evaluation:real-model": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts real-model",
+    "evaluation:real-groq": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts real-groq",
+    "evaluation:groq-smoke": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-smoke"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",

@@ -8,11 +8,11 @@
 
 The browser sends only `{ question }`, capped at 1,000 characters. It sends neither tenant/actor fields, tool names, source locations, arbitrary URLs, account facts, nor session assertions. `ApiRagClient` caps JSON/SSE payloads, preserves `credentials: include`, propagates `AbortSignal`, frames SSE across arbitrary chunks, and requires matching `event:`/JSON type, one trace ID, ordered lifecycle, one terminal response, and `complete`. A disconnect, malformed frame, out-of-order event, or unsupported terminal state clears pending UI state and never displays draft text.
 
-The server streams lifecycle/status and then exactly one fully server-validated `final`, `refusal`, or `error` response. It never emits Qwen tokens. Browser citation validation requires active-evidence metadata (`logicalId`, title, format, heading/section/page/anchor, excerpt); citation cards render metadata only, never a model URL or fabricated `href`.
+The server streams lifecycle/status and then exactly one fully server-validated `final`, `refusal`, or `error` response. It never emits generator tokens. Browser citation validation requires active-evidence metadata (`logicalId`, title, format, heading/section/page/anchor, excerpt); citation cards render metadata only, never a model URL or fabricated `href`.
 
 ## Documentation versus account evidence
 
-Public documentation retrieval always owns the `relayops-public` namespace and active source version. Qwen sees bounded inert evidence records and has no tool or tenant capability. Its claims must cite exactly retrieved active chunks.
+Public documentation retrieval always owns the `relayops-public` namespace and active source version. An explicitly selected generator sees only bounded inert public evidence records and the bounded public question; it has no tool, tenant, session, account, handoff, URL, or source-selection capability. Groq external inference is fixed server-side to `openai/gpt-oss-20b`; local Ollama is optional development-only. Claims must cite exactly retrieved active chunks.
 
 Account intent is a deterministic server policy (`subscription_seat_usage`, tenant-owned `job_status`, tenant-owned `support_ticket_status`), not a model proposal. The question body cannot alter the plan, its minimal argument, actor, or organization. A missing/foreign reference has the same refusal. Account facts are returned as a distinct `accountEvidence` union and are visually separated from documentation citations. Public documentation stays available without a session; account questions return `ACCOUNT_SIGN_IN_REQUIRED` without tenant disclosure.
 
@@ -31,4 +31,4 @@ pnpm test:integration
 pnpm test:e2e
 ```
 
-See `README.md`, `docs/GENERATION.md`, and `docs/ACCOUNT_TOOLS.md` for local model setup, evaluation, and the synthetic/non-production disclosure.
+See `README.md`, `docs/GENERATION.md`, and `docs/ACCOUNT_TOOLS.md` for explicit provider selection, hosted-inference privacy/Free Plan limits, optional local development setup, evaluation, and the synthetic/non-production disclosure.

@@ -12,7 +12,7 @@ job_status                          { reference: /^[A-Z]{2,8}-[0-9]{1,12}$/ }
 support_ticket_status               { reference: /^[A-Z]{2,8}-[0-9]{1,12}$/ }
 ```
 
-The service requires a resolved session, executes through `AccountToolService`, and returns the minimal result as separately labeled `accountEvidence`. It does not pass account facts to Qwen. Missing and foreign job/ticket references both become the same `ACCOUNT_REFERENCE_UNAVAILABLE` support refusal; unauthenticated account intent becomes `ACCOUNT_SIGN_IN_REQUIRED`. Public documentation retrieval remains available with no cookie.
+The service requires a resolved session, executes through `AccountToolService`, and returns the minimal result as separately labeled `accountEvidence`. It does not pass account facts to any generation provider, including Groq. Missing and foreign job/ticket references both become the same `ACCOUNT_REFERENCE_UNAVAILABLE` support refusal; unauthenticated account intent becomes `ACCOUNT_SIGN_IN_REQUIRED`. Public documentation retrieval remains available with no cookie.
 
 The protected direct API remains useful for inspection:
 

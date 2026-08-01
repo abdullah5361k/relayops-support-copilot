@@ -202,7 +202,11 @@ export type SupportAccountEvidence =
   | { kind: 'job_status'; label: 'Job status'; reference: string; status: JobStatus }
   | { kind: 'support_ticket_status'; label: 'Support ticket status'; reference: string; status: TicketStatus };
 
-export interface SupportProviderStatus { provider: 'ollama'; model: 'qwen3:4b'; available: boolean; }
+/** Fixed server-selected provider identity. The browser cannot choose a model, URL, or credential. */
+export type SupportProviderStatus =
+  | { provider: 'groq'; model: 'openai/gpt-oss-20b'; available: boolean }
+  | { provider: 'ollama'; model: 'qwen3:4b'; available: boolean }
+  | { provider: 'disabled'; model: 'disabled'; available: boolean };
 
 export interface SupportAnswerResponse {
   traceId: string;

@@ -1,6 +1,6 @@
 # RelayOps retrieval foundation
 
-RelayOps indexes an original fictional public corpus as active-version evidence. The same foundation now feeds the bounded local Qwen support integration, but retrieval itself remains evidence-only: it never accepts tenant authority, calls tools, executes document instructions, or exposes private customer data. See `docs/GENERATION.md` for the optional generation layer.
+RelayOps indexes an original fictional public corpus as active-version evidence. The same foundation feeds the bounded explicitly selected generation layer, but retrieval itself remains evidence-only: it never accepts tenant authority, calls tools, executes document instructions, or exposes private customer data. See `docs/GENERATION.md` for the optional hosted Groq/local-development Ollama generation boundary.
 
 ## Data flow and lifecycle
 
@@ -45,4 +45,4 @@ On Node 22.11.0, the cached Xenova fp32 `onnx/model.onnx` was 90,387,606 bytes w
 
 Every corpus file is original RelayOps fiction under this repository's MIT license. `field-visit-manual.pdf` is a minimal text-only PDF authored for this repository. `dispatcher-onboarding.docx` is a minimal Office Open XML ZIP authored with Python's standard `zipfile` module; neither artifact includes third-party material. Unsupported, malformed, empty, over-limit, scanned, encrypted, macro-executing, remote, and arbitrary local files are rejected/not offered.
 
-The separately bounded local Qwen/Ollama layer consumes this evidence only through the same server-owned namespace/active-version retrieval path. `corpus/support-evaluation.v1.json` adds a versioned 60-question integration/security evaluation; its deterministic and real-model commands/results are documented in [`GENERATION.md`](GENERATION.md). It does not alter retrieval isolation rules.
+The separately bounded generation layer consumes this evidence only through the same server-owned namespace/active-version retrieval path. Groq receives no private/account/handoff data and local Ollama remains optional development-only. `corpus/support-evaluation.v1.json` adds a versioned 60-question integration/security evaluation; deterministic, real-MiniLM, and real-Groq commands/results are documented in [`GENERATION.md`](GENERATION.md). It does not alter retrieval isolation rules.
