@@ -1,7 +1,9 @@
 import type { Article, ChatReply, ChatScenario, KnowledgeItem } from "./contracts";
 
 /**
- * Explicitly local, prewritten content for surfaces not backed by the API yet.
+ * Explicitly local public help content for surfaces not backed by the API yet.
+ * The deprecated reply helper below exists only for compatibility with the
+ * original unit test; application support uses RagClient/mock-rag-transport.
  * Nothing in this file is private tenant business data or a live AI response.
  */
 export const staticArticles: Article[] = [

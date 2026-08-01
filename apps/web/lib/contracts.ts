@@ -50,5 +50,5 @@ export interface RelayOpsAdapter {
   getWorkspace(): Promise<Workspace>;
   listArticles(): Promise<Article[]>;
   getArticle(slug: string): Promise<Article | null>;
-  askSupport(input: string, identity: DemoIdentity | null, scenario?: ChatScenario): Promise<ChatReply>;
+
 }
