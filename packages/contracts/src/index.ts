@@ -85,3 +85,70 @@ export interface DemoSessionResponse {
   role: string;
   organizationName: string;
 }
+
+/**
+ * Narrow, server-authorized account-tool contracts. These are not UI contracts and
+ * contain no organization or user authority fields. Documentation evidence is kept
+ * separate from account-tool read results.
+ */
+export interface SubscriptionSeatUsageResult {
+  kind: 'subscription_seat_usage';
+  planName: string;
+  status: string;
+  seatsUsed: number;
+  seatLimit: number;
+}
+
+export interface JobStatusToolResult {
+  kind: 'job_status';
+  reference: string;
+  status: JobStatus;
+}
+
+export interface SupportTicketStatusToolResult {
+  kind: 'support_ticket_status';
+  reference: string;
+  status: TicketStatus;
+}
+
+export interface DocumentationEvidenceReference {
+  sourceId: string;
+  locator?: string;
+}
+
+export interface HandoffPreviewInput {
+  summary: string;
+  documentationEvidence: DocumentationEvidenceReference[];
+  conversationExcerpt?: string;
+}
+
+export interface HandoffPreviewResult {
+  kind: 'handoff_preview';
+  draftId: string;
+  expiresAt: string;
+  shared: {
+    summary: string;
+    documentationEvidence: DocumentationEvidenceReference[];
+    conversationExcerpt: string | null;
+  };
+}
+
+export interface HandoffConfirmationInput { draftId: string; }
+
+export interface HandoffConfirmationResult {
+  kind: 'handoff_confirmed';
+  draftId: string;
+  ticket: { reference: string; status: TicketStatus };
+  /** False only for a same-actor retry after a committed confirmation. */
+  created: boolean;
+}
+
+export interface HandoffCancellationResult {
+  kind: 'handoff_cancelled';
+  draftId: string;
+  cancelled: boolean;
+}
+
+export type AccountToolReadResult = SubscriptionSeatUsageResult | JobStatusToolResult | SupportTicketStatusToolResult;
+export type AccountToolErrorCode = 'invalid_argument' | 'not_found' | 'invalid_draft' | 'draft_expired' | 'draft_cancelled';
+export interface AccountToolError { kind: 'error'; code: AccountToolErrorCode; }

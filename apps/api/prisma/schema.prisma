@@ -54,6 +54,13 @@ enum TicketPriority {
   HIGH
 }
 
+enum HandoffDraftState {
+  PENDING
+  CANCELLED
+  CONFIRMED
+  EXPIRED
+}
+
 enum KnowledgeVisibility {
   PUBLIC
   ORGANIZATION
@@ -82,6 +89,8 @@ model User {
   memberships OrganizationMembership[]
   technician  Technician?
   openedTickets SupportTicket[]
+  handoffDrafts HandoffDraft[]
+  toolAudits    ToolAudit[]
 
   @@map("users")
 }
@@ -99,6 +108,8 @@ model Organization {
   technicians   Technician[]
   jobs          Job[]
   supportTickets SupportTicket[]
+  handoffDrafts   HandoffDraft[]
+  toolAudits      ToolAudit[]
   knowledgeSources KnowledgeSource[]
 
   @@map("organizations")
@@ -290,6 +301,7 @@ model SupportTicket {
   body           String
   status         TicketStatus
   priority       TicketPriority @default(NORMAL)
+  handoffDraftId String?        @map("handoff_draft_id") @db.Uuid
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -298,6 +310,44 @@ model SupportTicket {
 
   @@unique([organizationId, id])
   @@unique([organizationId, reference])
+  @@unique([organizationId, handoffDraftId])
   @@index([organizationId, status])
   @@map("support_tickets")
+}
+
+model HandoffDraft {
+  id                    String            @id @default(uuid()) @db.Uuid
+  organizationId        String            @map("organization_id") @db.Uuid
+  actorId               String            @map("actor_id") @db.Uuid
+  state                 HandoffDraftState @default(PENDING)
+  summary               String
+  documentationEvidence Json              @map("documentation_evidence")
+  conversationExcerpt   String?           @map("conversation_excerpt")
+  expiresAt             DateTime          @map("expires_at")
+  confirmedAt           DateTime?         @map("confirmed_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  organization          Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor                 User              @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, actorId, state, expiresAt])
+  @@map("handoff_drafts")
+}
+
+model ToolAudit {
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  actorId           String       @map("actor_id") @db.Uuid
+  toolName          String       @map("tool_name")
+  sanitizedArguments Json        @map("sanitized_arguments")
+  outcome           String
+  traceId           String       @map("trace_id") @db.Uuid
+  latencyMs         Int          @map("latency_ms")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor             User         @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, actorId, createdAt])
+  @@index([traceId])
+  @@map("tool_audits")
 }
