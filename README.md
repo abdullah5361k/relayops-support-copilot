@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio project for small HVAC, plumbing, electrical, and repair businesses. The long-term product story is a website-integrated support assistant that combines public product documentation with safely tenant-scoped synthetic account data.
 
-**Current state:** this first focused PR is the backend and workspace foundation. It does not contain an LLM, RAG pipeline, production authentication, deployed service, or completed dashboard product.
+**Current state:** the repository contains two independently completed streams: a tenant-safe backend/workspace foundation and a polished, mock-backed product UI. They are deliberately not integrated yet. It does not contain an LLM, RAG pipeline, production authentication, or deployed service.
 
 ## Why this exists
 
@@ -25,7 +25,7 @@ No cloud resource or hosted service is created or required. The plans and subscr
 ```text
 apps/
   api/       NestJS API, Prisma schema/migration/seed, tenant boundary
-  web/       deliberately minimal buildable Next.js shell
+  web/       responsive public site, help centre, demo dashboard, and support-state UI
 packages/
   contracts/ shared API response contracts and demo identity types
   widget/    reusable React package boundary; assistant behavior is not implemented
@@ -44,11 +44,24 @@ No API key or account is needed. Port **55432** is used by default so an existin
 
 ## Clean-clone setup
 
+Enable the pinned package manager and install once:
+
 ```bash
 corepack enable
-cp .env.example .env
 pnpm install
+```
 
+The mock-backed UI runs independently with no database, credentials, or backend:
+
+```bash
+pnpm dev:web
+# open http://localhost:3000
+```
+
+For the separately developed API foundation, copy the local environment and start PostgreSQL:
+
+```bash
+cp .env.example .env
 docker compose up -d --wait
 pnpm db:migrate
 pnpm db:seed
@@ -57,7 +70,7 @@ pnpm dev
 
 Open:
 
-- minimal web shell: <http://localhost:3000>
+- product UI: <http://localhost:3000>
 - API health: <http://localhost:3001/api/health>
 
 Stop the local database with `docker compose down`. Add `--volumes` only when you intentionally want to delete local data. `.env` and generated output are ignored by Git.
@@ -132,37 +145,39 @@ pnpm test
 pnpm build
 ```
 
-The API tests cover the principal dashboard aggregation, exact demo-identity validation, server-derived tenant context, organization-scoped job lists, cross-tenant job denial, separate subscription seat counts, and isolated support tickets. The web test is only a smoke render for the intentionally minimal shell.
+The API tests cover dashboard aggregation, exact demo-identity validation, server-derived tenant context, organization-scoped queries, cross-tenant denial, seat counts, and isolated support tickets. UI tests cover deterministic tenant separation, evidence labels, and the support widget’s open/citation/close journey.
 
-## Screenshots
+## Product UI journey and screenshots
 
-No polished product screenshot is claimed in this backend-focused milestone. When the dashboard milestone lands:
+The UI uses local fixtures behind the typed `RelayOpsAdapter` boundary; see [`docs/INTEGRATION.md`](docs/INTEGRATION.md). It does not call the API yet.
 
-1. run the seeded apps at the default local URLs;
-2. capture both desktop and narrow responsive views for each demo tenant;
-3. remove any browser/profile identifiers;
-4. place optimized original images in `docs/screenshots/` and link them here.
+1. On `/`, open **Ask Relay** and inspect a public answer, citation, and exact source article.
+2. On `/demo`, select Northstar HVAC or PrimeFlow Plumbing. This simulated sign-in stores only a fictional tenant ID in the browser.
+3. Explore Overview, Jobs, Team, Customers, Subscription, Support tickets, and Knowledge.
+4. In Support tickets, replay cited, account-evidence, refusal, handoff, error, quota, and unavailable states.
+
+For screenshots, run `pnpm dev:web` and capture `/`, `/demo`, `/dashboard/overview`, `/dashboard/support`, and `/dashboard/knowledge` at 1440×1000 and 390×844. Keep simulation labels visible and remove browser/profile identifiers.
 
 ## Scope and roadmap
 
-### Complete in this milestone
+### Complete in the independent foundation and UI streams
 
 - pnpm TypeScript monorepo and shared contract/widget boundaries
-- minimal buildable Next.js shell (not the final product UI)
 - NestJS API vertical slice backed by PostgreSQL
 - tenant-structured Prisma schema, migration, pgvector availability, and seed
-- Northstar HVAC and PrimeFlow Plumbing demo sessions
-- tenant-isolation, API behavior, and shell smoke tests
+- Northstar HVAC and PrimeFlow Plumbing demo sessions and API isolation tests
+- responsive public, help-centre, demo dashboard, knowledge, and support-state UI
+- a single typed local mock adapter for all current UI data
 
 ### Later milestones — not completed claims
 
-1. **Product UI:** responsive authenticated dashboard navigation and database-backed jobs, team, subscription, and support views.
+1. **UI/API integration:** replace the local mock binding with authenticated API calls while preserving server-enforced tenant scope.
 2. **Documentation ingestion and RAG:** local/open-source ingestion, chunking, embeddings, retrieval, and source lifecycle.
 3. **Controlled account tools:** narrow read-only tenant tools with explicit authorization and schemas.
-4. **Support safety:** citations, uncertainty handling, refusal behavior, prompt-injection defenses, and privacy review.
+4. **Support safety:** grounded runtime citations, uncertainty handling, prompt-injection defenses, and privacy review.
 5. **Evaluation:** retrieval and response fixtures, tenant-leakage adversarial cases, quality thresholds, and regression reporting.
 6. **Deployment:** genuinely free-tier-compatible packaging and documented limits; no deployment exists today.
-7. **Portfolio assets:** original screenshots, architecture diagrams, demo script, accessibility/performance review, and truthful case-study copy.
+7. **Portfolio assets:** original screenshots, architecture diagrams, demo script, and truthful case-study copy.
 
 There are no payment flows, GPS features, dispatch optimization, mobile application, microservices, event bus, or Kubernetes in scope.
 

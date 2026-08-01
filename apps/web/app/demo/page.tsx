@@ -1,13 +1,7 @@
-import React from 'react';
-
-export default function DemoStatusPage() {
-  return (
-    <main className="status-page">
-      <a href="/">← RelayOps</a>
-      <p className="eyebrow">DEMO SURFACE</p>
-      <h1>Backend ready.<br /><em>Dashboard UI next.</em></h1>
-      <p>This PR intentionally contains only a minimal web shell. Use the documented demo-session API to explore tenant-scoped Northstar HVAC and PrimeFlow Plumbing records.</p>
-      <code>POST http://localhost:3001/api/demo/session</code>
-    </main>
-  );
-}
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Brand } from "@/components/PublicChrome";
+import type { TenantSummary } from "@/lib/contracts";
+import { relayOpsService } from "@/lib/service";
+export default function DemoPage() { const router = useRouter(); const [tenants, setTenants] = useState<TenantSummary[]>([]); useEffect(() => { void relayOpsService.listTenants().then(setTenants); }, []); function choose(tenant: TenantSummary) { localStorage.setItem("relayops-demo-tenant", tenant.id); router.push("/dashboard/overview"); } return <main className="demo-page"><section className="demo-aside"><Brand inverse /><div><span className="eyebrow" style={{ color: "#8ed8c2" }}>Interactive portfolio demo</span><h1>Step into a calmer service operation.</h1><p>Compare two synthetic workspaces, inspect the support journey, and explore responsive product screens—without creating an account.</p></div><p className="small">All names, businesses, jobs, and figures are fictional.</p></section><section className="demo-main"><div className="signin-card"><span className="eyebrow">Demo sign-in</span><h2>Choose a workspace</h2><p className="muted">Your selection stays visible across the demo dashboard.</p><div className="simulated-label"><b>No authentication occurs.</b> This selection only stores a fictional tenant ID in your browser.</div>{tenants.length ? tenants.map((tenant) => <button className="tenant-choice" key={tenant.id} onClick={() => choose(tenant)}><span className="tenant-logo">{tenant.initials}</span><span><b>{tenant.name}</b><small>{tenant.trade} · {tenant.location}</small></span><span aria-hidden="true">→</span></button>) : <p className="muted" aria-live="polite">Loading local demo workspaces…</p>}<button className="btn btn-quiet" style={{ marginTop: 18, width: "100%" }} onClick={() => router.push("/")}>← Back to website</button></div></section></main>; }
