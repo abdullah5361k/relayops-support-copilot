@@ -85,6 +85,18 @@ describe('grounded support generation', () => {
     expect(result).toMatchObject({ state: 'ANSWERED', accountEvidence: [{ planName: 'tenant-plan-sentinel' }], citations: [] });
     expect(model.status).not.toHaveBeenCalled(); expect(model.generate).not.toHaveBeenCalled(); expect(retrieval.searchPublic).not.toHaveBeenCalled();
   });
+
+  it('uses a canonical public documentation topic for a human-requested handoff while server-owned availability remains separate', async () => {
+    const model = provider(); const retrieval = { searchPublic: jest.fn().mockResolvedValue([evidence()]) }; const audit = { supportAnswerTrace: { create: jest.fn().mockResolvedValue({}) } };
+    const sessions = { resolve: jest.fn().mockResolvedValue({ organizationId: 'tenant-id-sentinel' }) };
+    const instance = new SupportAnswerService(retrieval as never, audit as never, { modelId: 'test', modelVersion: 'v1', embed: async () => [] }, model, undefined, sessions as never);
+    const result = await instance.answer('I need a human handoff about urgent incident acknowledgement.', { headers: { cookie: 'relayops_demo_session=secret-session-sentinel' } });
+    expect(result).toMatchObject({ state: 'ANSWERED', citations: [{ evidenceId: 'chunk-a' }], handoffAvailable: true });
+    expect(retrieval.searchPublic).toHaveBeenCalledWith('What does the public documentation say about urgent incident acknowledgement?', expect.anything(), 4);
+    const generatedQuestion = String((model.generate as jest.Mock).mock.calls[0]![0]).match(/QUESTION_START\n([\s\S]*?)\nQUESTION_END/)?.[1];
+    expect(generatedQuestion).toBe('What does the public documentation say about urgent incident acknowledgement?');
+    expect(generatedQuestion).not.toMatch(/human|handoff|tenant|session|create|execut/i);
+  });
 });
 
 describe('Ollama Qwen adapter', () => {

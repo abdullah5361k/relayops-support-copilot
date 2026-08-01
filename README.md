@@ -141,6 +141,25 @@ pnpm test:e2e
 
 Playwright starts the real API and web processes and runs both synthetic identities on desktop Chromium and a narrow/mobile Chromium viewport. It covers sign-in, refresh, all database-backed screens, tenant-specific records, identity replacement, sign-out, and direct protected-route access. API integration tests attempt cross-tenant jobs, customers, subscription usage, and tickets against PostgreSQL. Unit/component tests cover adapter success, empty responses, 401, failures, retry, switch/sign-out behavior, and static widget labeling.
 
+For an isolated browser run that includes owner Knowledge search/reindex, the API must use the pinned Node 22 runtime and an existing MiniLM cache; Node 24 intentionally makes the API return the honest local-embedding 503. Build the web with its internal proxy URL set **at build time**, then run the browser tests against that stack:
+
+```bash
+nvm use 22
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" API_PORT=3011 WEB_ORIGIN='http://127.0.0.1:3005' \
+RELAYOPS_GENERATION_PROVIDER=disabled pnpm --filter @relayops/api build
+RELAYOPS_API_INTERNAL_URL='http://127.0.0.1:3011' pnpm --filter @relayops/web build
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" API_PORT=3011 WEB_ORIGIN='http://127.0.0.1:3005' \
+RELAYOPS_GENERATION_PROVIDER=disabled node apps/api/dist/main.js
+# Separate shell, still on Node 22:
+RELAYOPS_API_INTERNAL_URL='http://127.0.0.1:3011' node apps/web/node_modules/next/dist/bin/next start -p 3005
+# Separate shell:
+RELAYOPS_E2E_BASE_URL='http://127.0.0.1:3005' pnpm test:e2e
+```
+
+Use a seeded isolated database/port in place of `55434`; do not run `next build` while a Next development server shares its `.next` directory.
+
 CI (`.github/workflows/ci.yml`) repeats migration, seed, lint, type checking, unit/component tests, PostgreSQL integration tests, builds, and browser tests. It creates no external resource beyond the ephemeral public-repository runner and service container.
 
 ## Retrieval foundation (evidence only)

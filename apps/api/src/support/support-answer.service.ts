@@ -119,6 +119,16 @@ function accountEvidence(result: AccountToolReadResult): SupportAccountEvidence 
   return { kind: result.kind, label: 'Support ticket status', reference: result.reference, status: result.status };
 }
 function isHandoffRequest(question: string): boolean { return /\b(handoff|human|person|support ticket|escalat)/i.test(question); }
+/**
+ * Handoff availability stays server-owned. The external prompt gets only a canonical public-doc topic,
+ * never the requester's human/handoff wording or any account/session material.
+ */
+export function publicDocumentationGenerationQuestion(question: string): string {
+  if (!isHandoffRequest(question)) return question;
+  if (/\b(acknowledg|incident|interruption|outage|urgent)\b/i.test(question)) return 'What does the public documentation say about urgent incident acknowledgement?';
+  if (/\b(job|intake|dispatch|visit)\b/i.test(question)) return 'What does the public documentation say about job intake?';
+  return 'What public documentation guidance is supported by the supplied evidence?';
+}
 /** Explicitly unsafe/out-of-scope requests are refused before an external call, even when related public evidence exists. */
 export function requiresPreGenerationRefusal(question: string): boolean {
   return /\b(ceo home address|competitor price|legal advice|customer password|rain tomorrow|all organization ids|change my payment method|deployed worldwide|another company customer list|exact repair time|four business hours|historical beta|ignore previous instructions|citation id fake|attacker\.example|ticket creation tool|system instructions|direct model url|invent a citation)\b/i.test(question);
@@ -173,13 +183,14 @@ export class SupportAnswerService {
   }
 
   private async documentation(question: string, traceId: string, options: AnswerOptions): Promise<{ validated?: { answer: string; citations: SupportCitation[] }; evidence: Evidence[]; error?: GenerationProviderError; metrics?: GenerationMetrics; refused?: boolean; invalidOutput?: boolean }> {
-    const evidence = await this.retrieval.searchPublic(question, this.embedder, MAX_EVIDENCE);
+    const publicQuestion = publicDocumentationGenerationQuestion(question);
+    const evidence = await this.retrieval.searchPublic(publicQuestion, this.embedder, MAX_EVIDENCE);
     if (options.signal?.aborted) throw new GenerationProviderError('CANCELLED', 'Generation was cancelled');
     if (!evidenceIsSufficient(evidence) || requiresPreGenerationRefusal(question)) return { evidence, refused: true };
     options.onStage?.('generating', traceId);
     await this.provider.status(options.signal);
     let generated;
-    try { generated = await this.provider.generate(buildGroundedPrompt(question, evidence), options.signal, { traceId }); }
+    try { generated = await this.provider.generate(buildGroundedPrompt(publicQuestion, evidence), options.signal, { traceId }); }
     catch (error) { return { evidence, error: error instanceof GenerationProviderError ? error : new GenerationProviderError('NETWORK', 'Generation request failed') }; }
     try { return { evidence, validated: validateOutput(generated.text, evidence), metrics: generated.metrics }; }
     catch (error) { return error instanceof NoGroundedClaimsError ? { evidence, metrics: generated.metrics, refused: true } : { evidence, metrics: generated.metrics, invalidOutput: true }; }
