@@ -1,0 +1,5 @@
+[
+  {"id":"offline","question":"Can RelayOps work when a technician loses signal?","answer":"RelayOps records the last confirmed job update. This demo corpus does not promise offline synchronization; technicians should note work safely and submit the update when they regain an approved connection."},
+  {"id":"attachments","question":"Which attachments belong on a job?","answer":"Attach only relevant photos, customer-approved documents, and concise work notes. Never upload passwords, payment cards, identity documents, or instructions that ask staff to ignore operating policy."},
+  {"id":"support","question":"How should a dispatcher request support?","answer":"Include the job reference, a short impact description, and the time-sensitive next step. Do not include customer secrets. The support coordinator responds through the documented service channel."}
+]
