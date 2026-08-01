@@ -160,7 +160,7 @@ RELAYOPS_E2E_BASE_URL='http://127.0.0.1:3005' pnpm test:e2e
 
 Use a seeded isolated database/port in place of `55434`; do not run `next build` while a Next development server shares its `.next` directory.
 
-CI (`.github/workflows/ci.yml`) repeats migration, seed, lint, type checking, unit/component tests, PostgreSQL integration tests, builds, and browser tests. It creates no external resource beyond the ephemeral public-repository runner and service container.
+CI (`.github/workflows/ci.yml`) repeats migration, seed, lint, type checking, unit/component tests, PostgreSQL integration tests, builds, and browser tests. To exercise the committed public corpus without downloading MiniLM weights, it explicitly sets `RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS=1` only while ingesting that corpus and starting the browser-test stack. This is a CI/test-only deterministic vector fixture, never a MiniLM fallback or deployed setting; without the exact flag, local and deployed paths require MiniLM as above. CI creates no external resource beyond the ephemeral public-repository runner and service container.
 
 ## Retrieval foundation (evidence only)
 

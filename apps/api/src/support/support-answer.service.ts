@@ -5,7 +5,7 @@ import { AccountToolException } from '../account-tools/account-tool.exception';
 import { AccountToolService } from '../account-tools/account-tool.service';
 import { DemoSessionResolver } from '../auth/demo-session.resolver';
 import type { TenantContextValue } from '../auth/tenant-context';
-import { MiniLmEmbeddingProvider } from '../knowledge/embeddings';
+import { createEmbeddingProvider } from '../knowledge/embeddings';
 import { KnowledgeRetrievalService } from '../knowledge/retrieval.service';
 import type { EmbeddingProvider, Evidence } from '../knowledge/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -158,7 +158,7 @@ export class SupportAnswerService {
   constructor(
     private readonly retrieval: KnowledgeRetrievalService,
     private readonly prisma: PrismaService,
-    @Inject(SUPPORT_EMBEDDER) private readonly embedder: EmbeddingProvider = new MiniLmEmbeddingProvider(),
+    @Inject(SUPPORT_EMBEDDER) private readonly embedder: EmbeddingProvider = createEmbeddingProvider(),
     @Inject(SUPPORT_GENERATION_PROVIDER) private readonly provider: GenerationProvider = new OllamaQwenProvider(),
     private readonly accountTools?: AccountToolService,
     private readonly sessions?: DemoSessionResolver

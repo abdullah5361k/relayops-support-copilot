@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import type { KnowledgeReindexRequest, KnowledgeReindexResponse, KnowledgeRunSummary, KnowledgeSearchHit, KnowledgeSnapshot, SupportCitation } from '@relayops/contracts';
 import { DemoSessionGuard } from '../auth/demo-session.guard';
 import { TenantContext, type TenantContextValue } from '../auth/tenant-context';
-import { MiniLmEmbeddingProvider } from './embeddings';
+import { createEmbeddingProvider } from './embeddings';
 import { KnowledgeIngestionService } from './ingestion.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeRetrievalService } from './retrieval.service';
@@ -18,7 +18,7 @@ function citation(item: { id: string; sourceLogicalId: string; sourceTitle: stri
 @Controller('knowledge')
 @UseGuards(DemoSessionGuard)
 export class KnowledgeController {
-  private readonly embedder = new MiniLmEmbeddingProvider();
+  private readonly embedder = createEmbeddingProvider();
   constructor(private readonly retrieval: KnowledgeRetrievalService, private readonly ingestion: KnowledgeIngestionService, private readonly prisma: PrismaService) {}
 
   private async runs(): Promise<KnowledgeRunSummary[]> {
