@@ -9,6 +9,7 @@ import type {
   SupportTicketSummary,
   TeamMember
 } from "@relayops/contracts";
+import type { RagClient } from "./rag-contracts";
 
 export type { DemoIdentity, DemoIdentitySummary, DemoSessionResponse } from "@relayops/contracts";
 export type Section = "overview" | "jobs" | "team" | "customers" | "subscription" | "support" | "knowledge";
@@ -50,5 +51,6 @@ export interface RelayOpsAdapter {
   getWorkspace(): Promise<Workspace>;
   listArticles(): Promise<Article[]>;
   getArticle(slug: string): Promise<Article | null>;
-
+  /** Same-origin validated support/Knowledge boundary. */
+  support: RagClient;
 }

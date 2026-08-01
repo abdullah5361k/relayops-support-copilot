@@ -1,6 +1,6 @@
-# RelayOps retrieval foundation (Phase 1)
+# RelayOps retrieval foundation
 
-This milestone indexes an original, fictional public RelayOps corpus and returns inspectable **evidence**, not answers. It does not run Qwen/Ollama, generate text, stream chat, alter product UI, read customer data, or provide account tools.
+RelayOps indexes an original fictional public corpus as active-version evidence. The same foundation now feeds the bounded local Qwen support integration, but retrieval itself remains evidence-only: it never accepts tenant authority, calls tools, executes document instructions, or exposes private customer data. See `docs/GENERATION.md` for the optional generation layer.
 
 ## Data flow and lifecycle
 
@@ -33,7 +33,7 @@ pnpm --filter @relayops/api knowledge:inspect
 RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:evaluate
 ```
 
-`GET /api/knowledge/search?q=...` is a development evidence-inspection endpoint and returns 503 with the embedding failure message when MiniLM is unavailable. Mutating ingestion is CLI-only and fixed to the committed manifest.
+Knowledge inspection is now owner-demo-session protected: `GET /api/knowledge`, `GET /api/knowledge/search?q=...`, and `POST /api/knowledge/reindex`. The UI/API reveal only sanitized source/version/chunk/run/model-cache metadata and active public evidence. Reindex accepts `{ logicalId? }` only when it is in `corpus/manifest.json`; it never accepts a filesystem path, URL, body corpus, secret, or model option. A local MiniLM failure returns a generic local-availability state and retains the previous active version.
 
 The versioned gold set is `corpus/gold-set.v1.json`; it covers direct and paraphrased questions, multi-source retrieval, unanswerable and injection-like prompts, and the superseded four-hour policy. Evaluation reports recall@5, expected-source hit rate, stale-version violations, namespace violations and latency. Node 22.11.0 measured `1.00` recall@5/expected-source hit rate, `0` stale and namespace violations, and 71 ms mean / 478 ms max latency on the committed corpus (first query includes model warm-up). No threshold is claimed because local model/runtime results vary. The deliberately unanswerable items may still retrieve related evidence: Phase 1 is retrieval, not an answerability classifier.
 
@@ -45,4 +45,4 @@ On Node 22.11.0, the cached Xenova fp32 `onnx/model.onnx` was 90,387,606 bytes w
 
 Every corpus file is original RelayOps fiction under this repository's MIT license. `field-visit-manual.pdf` is a minimal text-only PDF authored for this repository. `dispatcher-onboarding.docx` is a minimal Office Open XML ZIP authored with Python's standard `zipfile` module; neither artifact includes third-party material. Unsupported, malformed, empty, over-limit, scanned, encrypted, macro-executing, remote, and arbitrary local files are rejected/not offered.
 
-The separately bounded local Qwen/Ollama grounded-generation layer consumes this evidence only through the same server-owned namespace/active-version retrieval path. It does not alter the Phase 1 retrieval isolation rules; see [`GENERATION.md`](GENERATION.md) for its optional runtime, prompt/citation boundary, and failure behavior.
+The separately bounded local Qwen/Ollama layer consumes this evidence only through the same server-owned namespace/active-version retrieval path. `corpus/support-evaluation.v1.json` adds a versioned 60-question integration/security evaluation; its deterministic and real-model commands/results are documented in [`GENERATION.md`](GENERATION.md). It does not alter retrieval isolation rules.

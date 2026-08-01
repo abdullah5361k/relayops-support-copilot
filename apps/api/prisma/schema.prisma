@@ -346,6 +346,7 @@ model HandoffDraft {
   state                 HandoffDraftState @default(PENDING)
   summary               String
   documentationEvidence Json              @map("documentation_evidence")
+  accountEvidence       Json              @default("[]") @map("account_evidence")
   conversationExcerpt   String?           @map("conversation_excerpt")
   expiresAt             DateTime          @map("expires_at")
   confirmedAt           DateTime?         @map("confirmed_at")

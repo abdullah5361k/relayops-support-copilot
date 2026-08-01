@@ -4,7 +4,7 @@ import { buildGroundedPrompt, evidenceIsSufficient, SupportAnswerService } from 
 import { SupportController } from '../src/support/support.controller';
 import type { Evidence } from '../src/knowledge/types';
 
-const evidence = (id = 'chunk-a'): Evidence => ({ id, sourceLogicalId: 'incident-guide', sourceTitle: 'Incident guide', content: 'Acknowledge urgent incidents within fifteen minutes and record the incident timeline.', heading: 'Urgent incidents', section: null, page: 2, anchor: 'urgent', score: 0.03 });
+const evidence = (id = 'chunk-a'): Evidence => ({ id, sourceLogicalId: 'incident-guide', sourceTitle: 'Incident guide', sourceType: 'html', content: 'Acknowledge urgent incidents within fifteen minutes and record the incident timeline.', heading: 'Urgent incidents', section: null, page: 2, anchor: 'urgent', score: 0.03 });
 const provider = (raw = '{"claims":[{"text":"Acknowledge urgent incidents within fifteen minutes.","citationIds":["chunk-a"]}]}'): GenerationProvider => ({
   provider: 'ollama', model: 'qwen3:4b', status: jest.fn().mockResolvedValue({ provider: 'ollama', model: 'qwen3:4b', available: true }), generate: jest.fn().mockResolvedValue(raw)
 });
@@ -79,14 +79,15 @@ describe('Ollama Qwen adapter', () => {
 });
 
 describe('support SSE ordering', () => {
-  it('emits final answer before validated citations and never exposes a token delta', async () => {
+  it('emits one validated terminal response and never exposes token deltas', async () => {
     const result = await service().instance.answer('What should I do?');
     const answer = { answer: jest.fn().mockResolvedValue(result) };
     const controller = new SupportController(answer as never); const request = new EventEmitter() as never;
     const response = Object.assign(new EventEmitter(), { status: jest.fn().mockReturnThis(), set: jest.fn().mockReturnThis(), flushHeaders: jest.fn(), write: jest.fn(), end: jest.fn() });
     await controller.stream({ question: 'What should I do?' }, request, response as never);
     const payloads = (response.write as jest.Mock).mock.calls.map(([line]) => String(line));
-    expect(payloads.findIndex((line) => line.includes('"type":"answer"'))).toBeLessThan(payloads.findIndex((line) => line.includes('"type":"citations"')));
+    expect(payloads.filter((line) => line.includes('"type":"final"'))).toHaveLength(1);
+    expect(payloads.join('')).toContain('"citations"');
     expect(payloads.join('')).not.toContain('delta');
   });
 });

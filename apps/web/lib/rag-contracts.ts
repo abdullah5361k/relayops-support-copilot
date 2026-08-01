@@ -1,115 +1,52 @@
-/**
- * UI-local seam for the future grounded-answer service.
- *
- * The browser sends a question and optional development fixture selector only.
- * It never sends an organization identifier or treats one as authority.
- */
-export type RagPhase = "pending" | "retrieving" | "generating";
-export type RagScenario =
-  | "answer"
-  | "account"
-  | "refusal"
-  | "handoff"
-  | "model-loading"
-  | "unavailable"
-  | "timeout"
-  | "quota"
-  | "malformed"
-  | "network";
+import type {
+  HandoffConfirmationResult, HandoffPreviewInput, HandoffPreviewResult, KnowledgeReindexResponse, KnowledgeSearchHit, KnowledgeSnapshot,
+  SupportAccountEvidence, SupportAnswerRequest, SupportAnswerResponse, SupportCitation, SupportStreamEvent
+} from '@relayops/contracts';
 
-export type Citation = {
-  id: string;
-  title: string;
-  sourceType: "help-article" | "runbook" | "public-guide";
-  heading?: string;
-  page?: number;
-  anchor?: string;
-  href?: string;
-  excerpt?: string;
-};
-
-export type AccountEvidence = {
-  id: string;
-  label: string;
-  value: string;
-  reason: string;
-  authRequired: boolean;
-  source: "workspace-tool" | "support-ticket" | "subscription" | "job";
-};
-
-export type RagErrorCode =
-  | "provider-unavailable"
-  | "model-loading"
-  | "timeout"
-  | "resource-exhausted"
-  | "malformed-response"
-  | "network-loss"
-  | "cancelled";
+/** Browser-only state projection over the shared API contract. It has no tenant fields. */
+export type RagPhase = 'pending' | 'retrieving' | 'generating';
+export type RagErrorCode = 'provider-unavailable' | 'timeout' | 'malformed-response' | 'network-loss' | 'cancelled' | 'sign-in-required';
+export type RagScenario = 'answer' | 'account' | 'refusal' | 'handoff' | 'unavailable' | 'timeout' | 'malformed' | 'network';
+export type Citation = SupportCitation;
+export type AccountEvidence = SupportAccountEvidence;
+export type HandoffPreview = HandoffPreviewResult;
+export type HandoffResult = HandoffConfirmationResult;
+export type KnowledgeRun = KnowledgeSnapshot['runs'][number];
+export type KnowledgeSearch = KnowledgeSearchHit;
+export type { KnowledgeSearchHit, KnowledgeSnapshot, SupportAnswerRequest, SupportAnswerResponse, SupportStreamEvent };
 
 export type RagStreamEvent =
-  | { type: "started"; requestId: string }
-  | { type: "phase"; phase: RagPhase; label: string }
-  | { type: "delta"; text: string }
-  | { type: "final"; answer: string; citations: Citation[]; accountEvidence?: AccountEvidence[]; handoffAvailable?: boolean }
-  | { type: "refusal"; reason: "insufficient-evidence" | "unsupported-scope"; message: string; suggestedAction: string }
-  | { type: "error"; code: RagErrorCode; message: string; retryable: boolean }
-  | { type: "cancelled"; message: string }
-  | { type: "ended" };
-
-export type RagAnswerRequest = { question: string; scenario?: RagScenario };
-
-export type HandoffShare = {
-  question: string;
-  transcript: string[];
-  citations: Citation[];
-  accountEvidence: AccountEvidence[];
-};
-export type HandoffPreview = {
-  previewId: string;
-  expiresAt: string;
-  share: HandoffShare;
-};
-export type HandoffResult = { ticketReference: string; createdAt: string; message: string };
-
-export type KnowledgeSource = {
-  id: string;
-  title: string;
-  sourceType: "public-guide" | "runbook";
-  status: "active" | "previous";
-  version: string;
-  updatedAt: string;
-  origin: string;
-  chunkCount: number;
-};
-export type KnowledgeRun = {
-  id: string;
-  sourceId: string;
-  status: "completed" | "running" | "failed";
-  stage: "queued" | "parsing" | "chunking" | "embedding" | "activating" | "complete" | "failed";
-  startedAt: string;
-  finishedAt?: string;
-  error?: string;
-};
-export type KnowledgeSearchHit = { sourceId: string; title: string; heading: string; chunk: string; score: number; page?: number; anchor?: string };
-export type KnowledgeSnapshot = {
-  sources: KnowledgeSource[];
-  runs: KnowledgeRun[];
-  model: { name: string; status: "ready" | "loading" | "unavailable"; cache: "present" | "missing"; note: string };
-};
+  | { type: 'started'; requestId: string }
+  | { type: 'phase'; phase: RagPhase; label: string }
+  | { type: 'final'; response: SupportAnswerResponse }
+  | { type: 'refusal'; response: SupportAnswerResponse }
+  | { type: 'error'; code: RagErrorCode; message: string; retryable: boolean }
+  | { type: 'cancelled'; message: string }
+  | { type: 'ended' };
 
 export interface RagClient {
-  streamAnswer(request: RagAnswerRequest, signal?: AbortSignal): AsyncIterable<RagStreamEvent>;
-  previewHandoff(input: { question: string; transcript: string[]; citations: Citation[]; accountEvidence: AccountEvidence[] }): Promise<HandoffPreview>;
-  confirmHandoff(previewId: string): Promise<HandoffResult>;
-  cancelHandoff(previewId: string): Promise<void>;
+  streamAnswer(request: SupportAnswerRequest, signal?: AbortSignal): AsyncIterable<RagStreamEvent>;
+  previewHandoff(input: HandoffPreviewInput): Promise<HandoffPreview>;
+  confirmHandoff(draftId: string): Promise<HandoffResult>;
+  cancelHandoff(draftId: string): Promise<void>;
   getKnowledge(): Promise<KnowledgeSnapshot>;
   searchKnowledge(query: string): Promise<KnowledgeSearchHit[]>;
-  reindexKnowledge(sourceId: string): Promise<KnowledgeRun>;
+  reindexKnowledge(logicalId?: string): Promise<KnowledgeReindexResponse>;
 }
 
+const sourceTypes = new Set(['html', 'faq-json', 'pdf', 'docx']);
 export function isCitation(value: unknown): value is Citation {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Citation;
-  return typeof candidate.id === "string" && typeof candidate.title === "string" &&
-    ["help-article", "runbook", "public-guide"].includes(candidate.sourceType);
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.evidenceId === 'string' && typeof item.sourceLogicalId === 'string' && typeof item.sourceTitle === 'string'
+    && sourceTypes.has(String(item.sourceType)) && typeof item.excerpt === 'string'
+    && (item.heading === null || typeof item.heading === 'string') && (item.section === null || typeof item.section === 'string')
+    && (item.page === null || Number.isInteger(item.page)) && (item.anchor === null || typeof item.anchor === 'string');
+}
+export function isValidatedAnswer(value: unknown): value is SupportAnswerResponse {
+  if (!value || typeof value !== 'object') return false;
+  const answer = value as Partial<SupportAnswerResponse>;
+  return typeof answer.traceId === 'string' && (answer.state === 'ANSWERED' || answer.state === 'REFUSED' || answer.state === 'ERROR')
+    && Array.isArray(answer.citations) && answer.citations.every(isCitation) && Array.isArray(answer.accountEvidence)
+    && (answer.answer === null || typeof answer.answer === 'string') && (answer.refusalReason === null || typeof answer.refusalReason === 'string');
 }

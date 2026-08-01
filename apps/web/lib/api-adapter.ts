@@ -12,6 +12,7 @@ import type {
 import type { RelayOpsAdapter } from "./contracts";
 import { RelayOpsApiError } from "./contracts";
 import { getStaticArticle, listStaticArticles, staticKnowledge } from "./static-content";
+import { ApiRagClient } from "./api-rag-client";
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -58,5 +59,6 @@ export function createApiAdapter(fetchImpl: Fetch = fetch, baseUrl = process.env
     },
     listArticles: listStaticArticles,
     getArticle: getStaticArticle,
+    support: new ApiRagClient(fetchImpl as typeof fetch)
   };
 }

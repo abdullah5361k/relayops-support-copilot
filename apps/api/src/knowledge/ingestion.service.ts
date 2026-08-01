@@ -13,10 +13,25 @@ export const PARSER_VERSION = 'relayops-extract-chunk-v1';
 @Injectable()
 export class KnowledgeIngestionService {
   constructor(private readonly prisma: PrismaService) {}
+  private async manifest(root = resolve(__dirname, '../../../..')): Promise<CorpusSource[]> {
+    const sources = JSON.parse(await readFile(resolve(root, 'corpus/manifest.json'), 'utf8')) as unknown;
+    if (!Array.isArray(sources) || sources.some((source) => !source || typeof source !== 'object' || typeof (source as CorpusSource).logicalId !== 'string')) throw new Error('Committed corpus manifest is invalid');
+    return sources as CorpusSource[];
+  }
   async ingestCommittedCorpus(embedder: EmbeddingProvider): Promise<Array<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed'; message?: string }>> {
-    const root = resolve(__dirname, '../../../..');
-    const manifest = JSON.parse(await readFile(resolve(root, 'corpus/manifest.json'), 'utf8')) as CorpusSource[];
-    return Promise.all(manifest.map((source) => this.ingestSource(source, embedder, root)));
+    const root = resolve(__dirname, '../../../..'); const manifest = await this.manifest(root);
+    // Sequential activation avoids competing active-version writes while retaining the previous active version on failure.
+    const results: Array<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed'; message?: string }> = [];
+    for (const source of manifest) results.push(await this.ingestSource(source, embedder, root));
+    return results;
+  }
+  async ingestAllowlisted(logicalId: string | undefined, embedder: EmbeddingProvider): Promise<Array<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed'; message?: string }>> {
+    const root = resolve(__dirname, '../../../..'); const manifest = await this.manifest(root);
+    const selected = logicalId ? manifest.filter((source) => source.logicalId === logicalId) : manifest;
+    if (logicalId && selected.length !== 1) throw new Error('Requested source is not in the committed corpus manifest');
+    const results: Array<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed'; message?: string }> = [];
+    for (const source of selected) results.push(await this.ingestSource(source, embedder, root));
+    return results;
   }
   async ingestSource(source: CorpusSource, embedder: EmbeddingProvider, root = resolve(__dirname, '../../../..')): Promise<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed'; message?: string }> {
     if (source.visibility !== 'PUBLIC' || source.namespace !== PUBLIC_NAMESPACE || source.path.includes('..') || !source.path.startsWith('sources/')) throw new Error('Only allowlisted public corpus manifest entries may be ingested');

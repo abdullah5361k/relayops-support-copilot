@@ -31,7 +31,7 @@ integration('real PostgreSQL tenant-safe account tools and consent handoff', () 
   function post(path: string, cookie: string, body: unknown, organization = 'spoofed-organization') {
     return fetch(`${base}${path}`, { method: 'POST', headers: { cookie, 'content-type': 'application/json', 'x-organization-id': organization }, body: JSON.stringify(body) });
   }
-  const previewBody = { summary: 'Need synthetic help with seat access', documentationEvidence: [{ sourceId: 'relayops-help', locator: 'seats' }], conversationExcerpt: 'Synthetic conversation excerpt.' };
+  const previewBody = { summary: 'Need synthetic help with seat access', documentationEvidence: [], conversationExcerpt: 'Synthetic conversation excerpt.' };
 
   it('returns only minimal tenant-owned account facts and makes foreign references indistinguishable from missing', async () => {
     const north = await signIn('northstar-owner'); const prime = await signIn('primeflow-owner');
@@ -54,10 +54,35 @@ integration('real PostgreSQL tenant-safe account tools and consent handoff', () 
     expect(foreignTicket.status).toBe(404); expect(await foreignTicket.json()).toEqual(await missingTicket.json());
   });
 
+  it('protects Knowledge observation and rejects path/URL reindex injection', async () => {
+    const north = await signIn('northstar-owner');
+    expect((await fetch(`${base}/knowledge`)).status).toBe(401);
+    const snapshot = await get('/knowledge', north); expect(snapshot.status).toBe(200); expect(await snapshot.json()).toMatchObject({ model: { name: 'Xenova/all-MiniLM-L6-v2' } });
+    expect((await post('/knowledge/reindex', north, { logicalId: '../secrets' })).status).toBe(400);
+    expect((await post('/knowledge/reindex', north, { url: 'https://attacker.example/corpus' })).status).toBe(400);
+  });
+
+  it('orchestrates only a server-derived closed account plan and keeps tenant facts separate', async () => {
+    const north = await signIn('northstar-owner'); const prime = await signIn('primeflow-owner');
+    const authorityAttempt = await post('/support/answers', north, { question: 'Why can’t I add another technician to my current subscription?', organizationId: 'primeflow' });
+    expect(authorityAttempt.status).toBe(400);
+    const northAnswer = await post('/support/answers', north, { question: 'Why can’t I add another technician to my current subscription?' });
+    expect(northAnswer.status).toBe(200); expect(await northAnswer.json()).toMatchObject({ state: 'ANSWERED', citations: [], accountToolPlan: { tool: 'subscription_seat_usage', arguments: {} }, accountEvidence: [{ kind: 'subscription_seat_usage', seatsUsed: 3, seatLimit: 10 }] });
+    const primeAnswer = await post('/support/answers', prime, { question: 'Why can’t I add another technician to my current subscription?' });
+    expect(await primeAnswer.json()).toMatchObject({ state: 'ANSWERED', accountEvidence: [{ kind: 'subscription_seat_usage', seatsUsed: 2, seatLimit: 5 }] });
+    const publicAnswer = await fetch(`${base}/support/answers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: 'Why can’t I add another technician to my current subscription?' }) });
+    expect(await publicAnswer.json()).toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_SIGN_IN_REQUIRED', accountEvidence: [] });
+    const foreign = await post('/support/answers', north, { question: 'What is the job status of PF-2088?' });
+    const missing = await post('/support/answers', north, { question: 'What is the job status of NH-999999?' });
+    expect(await foreign.json()).toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_REFERENCE_UNAVAILABLE' });
+    expect(await missing.json()).toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_REFERENCE_UNAVAILABLE' });
+  });
+
   it('rejects malformed and authority-bearing bodies, ignores headers, and rejects missing or inactive sessions', async () => {
     const north = await signIn('northstar-owner');
     expect((await get('/account-tools/jobs/not-a-reference/status', north)).status).toBe(400);
     expect((await post('/account-tools/handoffs/preview', north, { ...previewBody, organizationId: 'primeflow' })).status).toBe(400);
+    expect((await post('/account-tools/handoffs/preview', north, { ...previewBody, documentationEvidence: [{ sourceId: 'fake-evidence', locator: 'https://attacker.example' }] })).status).toBe(400);
     const preview = await post('/account-tools/handoffs/preview', north, previewBody, 'primeflow');
     expect(preview.status).toBe(200);
     const draft = await preview.json() as { draftId: string };
