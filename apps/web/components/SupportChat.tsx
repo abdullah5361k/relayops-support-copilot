@@ -5,6 +5,8 @@ import { isCitation } from '@/lib/rag-contracts';
 import { relayOpsService } from '@/lib/service';
 
 type Props = { embedded?: boolean; initialOpen?: boolean };
+const frontendOnlyPreview = process.env.NEXT_PUBLIC_RELAYOPS_DEPLOYMENT_MODE === 'frontend-preview';
+const previewUnavailableMessage = 'This hosted UI preview has no Nest API, PostgreSQL, MiniLM cache, or Groq path. Support answers, citations, account evidence, and handoffs are unavailable; no answer is shown.';
 const prompts = [
   { label: 'How do I acknowledge an urgent job?', question: 'How do I acknowledge an urgent job?' },
   { label: 'Show my current seat usage', question: 'Why can’t I add another technician to my current subscription?' },
@@ -21,7 +23,7 @@ export function SupportChat({ embedded = false, initialOpen = false }: Props) {
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]); useEffect(() => () => controllerRef.current?.abort(), []);
 
   async function ask(text: string) {
-    if (loading || !text.trim()) return; controllerRef.current?.abort(); const controller = new AbortController(); controllerRef.current = controller;
+    if (frontendOnlyPreview || loading || !text.trim()) return; controllerRef.current?.abort(); const controller = new AbortController(); controllerRef.current = controller;
     setOpen(true); setSent(text); setQuestion(''); setAnswer(null); setRefusal(null); setFailure(null); setCancelled(false); setHandoff(null); setHandoffState('idle'); setTicket(null); setPhase('pending'); setLoading(true); setLastQuestion(text);
     let started = false; let terminal = false;
     try {
@@ -63,7 +65,7 @@ export function SupportChat({ embedded = false, initialOpen = false }: Props) {
   return <div className="chat-window" role="dialog" aria-label="Relay support" aria-modal={!embedded}>
     <div className="chat-head"><div><b>Relay support <span className="status-dot" style={{ display: 'inline-block' }} /></b><p>Public evidence with a server-selected optional generator · fictional portfolio demo</p></div>{!embedded && <button className="icon-button" onClick={() => setOpen(false)} aria-label="Close support chat">×</button>}</div>
     <div className="chat-messages" aria-live="polite">
-      {!sent && <><div className="chat-intro"><span className="logo-mark" aria-hidden="true" /><h3>How can I help?</h3><p>Answers are accepted only after the server validates grounded public citations. The selected generator may be unavailable.</p></div><div className="chat-suggestions">{prompts.map((prompt) => <button className="suggestion" key={prompt.label} onClick={() => void ask(prompt.question)} disabled={loading}>{prompt.label} <span aria-hidden="true">→</span></button>)}</div></>}
+      {!sent && <><div className="chat-intro"><span className="logo-mark" aria-hidden="true" /><h3>{frontendOnlyPreview ? 'Support unavailable in this UI preview' : 'How can I help?'}</h3><p>{frontendOnlyPreview ? previewUnavailableMessage : 'Answers are accepted only after the server validates grounded public citations. The selected generator may be unavailable.'}</p></div><div className="chat-suggestions">{prompts.map((prompt) => <button className="suggestion" key={prompt.label} onClick={() => void ask(prompt.question)} disabled={frontendOnlyPreview || loading}>{prompt.label} <span aria-hidden="true">→</span></button>)}</div></>}
       {sent && <div className="bubble user">{sent}</div>}
       {loading && <div className="stream-status" role="status"><b>{phase === 'retrieving' ? 'Checking active public evidence' : phase === 'generating' ? 'Generating and validating evidence-backed output' : 'Request accepted'}</b><span className="loading-dots"><span /><span /><span /></span><button className="btn btn-quiet small" onClick={cancel}>Cancel</button></div>}
       {cancelled && !loading && <div className="state-message neutral" role="status"><b>Request cancelled</b><span>No draft or answer was kept.</span></div>}
@@ -75,7 +77,7 @@ export function SupportChat({ embedded = false, initialOpen = false }: Props) {
       {ticket && <div className="handoff-success" role="status"><b>✦ Synthetic ticket confirmed: {ticket}</b><span>Created only after explicit confirmation; no production ticket was sent.</span></div>}
       {sent && !loading && <button className="btn btn-quiet small" onClick={reset}>← Try another question</button>}
     </div>
-    <div className="chat-form"><form onSubmit={submit}><label className="sr-only" htmlFor={embedded ? 'support-input-embedded' : 'support-input'}>Ask a support question</label><input ref={inputRef} id={embedded ? 'support-input-embedded' : 'support-input'} value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder="Ask a support question…" disabled={loading} /><button className="chat-send" aria-label="Send question" disabled={loading || !question.trim()}>↑</button></form><p className="chat-disclaimer">Original fictional demo. Documentation is public evidence; account facts and handoff need a demo session.</p></div>
+    <div className="chat-form"><form onSubmit={submit}><label className="sr-only" htmlFor={embedded ? 'support-input-embedded' : 'support-input'}>Ask a support question</label><input ref={inputRef} id={embedded ? 'support-input-embedded' : 'support-input'} value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={frontendOnlyPreview ? "Support is unavailable in this UI preview" : "Ask a support question…"} disabled={frontendOnlyPreview || loading} /><button className="chat-send" aria-label="Send question" disabled={frontendOnlyPreview || loading || !question.trim()}>↑</button></form><p className="chat-disclaimer">Original fictional demo. Documentation is public evidence; account facts and handoff need a demo session.</p></div>
   </div>;
 }
 function CitationCard({ citation }: { citation: Citation }) { return <article className="evidence citation-card"><span className="evidence-type">Active documentation evidence</span><b>{citation.sourceTitle}</b><small>{citation.sourceType}{citation.heading ? ` · ${citation.heading}` : ''}{citation.section ? ` · ${citation.section}` : ''}{citation.page ? ` · page ${citation.page}` : ''}{citation.anchor ? ` · #${citation.anchor}` : ''}</small><p>“{citation.excerpt}”</p></article>; }

@@ -10,6 +10,9 @@ import { Brand } from "./PublicChrome";
 import { SupportChat } from "./SupportChat";
 import { KnowledgeConsole } from "./KnowledgeConsole";
 
+const frontendOnlyPreview = process.env.NEXT_PUBLIC_RELAYOPS_DEPLOYMENT_MODE === "frontend-preview";
+const previewUnavailableMessage = "This hosted UI preview does not include the Nest API, PostgreSQL, MiniLM retrieval cache, or Groq path. Private workspace data, sessions, support answers, citations, and tickets are unavailable. Use the local full-stack command in the README to verify them.";
+
 const nav: { section: Section; label: string; icon: string }[] = [
   { section: "overview", label: "Overview", icon: "⌂" }, { section: "jobs", label: "Jobs", icon: "▣" }, { section: "team", label: "Team", icon: "♙" }, { section: "customers", label: "Customers", icon: "♧" }, { section: "subscription", label: "Subscription", icon: "◫" }, { section: "support", label: "Support tickets", icon: "◌" }, { section: "knowledge", label: "Knowledge", icon: "◇" }
 ];
@@ -26,6 +29,7 @@ export function DashboardShell() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
+    if (frontendOnlyPreview) { setError(previewUnavailableMessage); setLoading(false); return; }
     try {
       const active = await relayOpsService.getDemoSession();
       setSession(active);
@@ -54,7 +58,7 @@ export function DashboardShell() {
   }
 
   if (loading && !data) return <Loading />;
-  if (error && !data) return <main className="route-state"><div className="error-panel" role="alert"><b>Workspace unavailable</b><p>{error}</p><button className="btn btn-primary" onClick={() => void load()}>Retry</button><Link className="btn btn-quiet" href="/demo">Return to demo sign-in</Link></div></main>;
+  if (error && !data) return <main className="route-state"><div className="error-panel" role="alert"><b>{frontendOnlyPreview ? "Workspace unavailable in this UI preview" : "Workspace unavailable"}</b><p>{error}</p>{!frontendOnlyPreview && <button className="btn btn-primary" onClick={() => void load()}>Retry</button>}<Link className="btn btn-quiet" href="/demo">Return to demo sign-in</Link></div></main>;
   if (!data || !session) return <Loading />;
 
   const organization = data.dashboard.organization;

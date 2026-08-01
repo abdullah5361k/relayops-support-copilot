@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 .next/
+apps/web/out/
 dist/
 coverage/
 *.tsbuildinfo
@@ -11,6 +12,7 @@ coverage/
 *.log
 .vscode/
 .idea/
+.vercel/
 
 # Browser test artifacts
 apps/web/test-results/

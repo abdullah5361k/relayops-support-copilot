@@ -1,0 +1,12 @@
+# Local configuration and generated evidence never leave this worktree.
+.env
+.env.*
+*.log
+
+# This preview deploys only the Next.js UI; its API/database/model runtime stays local.
+apps/api/
+apps/web/e2e/
+apps/web/__tests__/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/out/
