@@ -1,11 +1,11 @@
-import { GROQ_CHAT_COMPLETIONS_URL, GROQ_MODEL, BoundedQueue, DisabledGenerationProvider, GenerationProviderError, GroqFreePlanLimiter, GroqProvider, ProviderCircuitBreaker, createGenerationProvider } from '../src/support/generation.provider';
+import { GROQ_CHAT_COMPLETIONS_URL, GROQ_MAX_COMPLETION_TOKENS, GROQ_MODEL, BoundedQueue, DisabledGenerationProvider, GenerationProviderError, GroqFreePlanLimiter, GroqProvider, ProviderCircuitBreaker, createGenerationProvider } from '../src/support/generation.provider';
 import { buildGroundedPrompt } from '../src/support/support-answer.service';
 import type { Evidence } from '../src/knowledge/types';
 
 const evidence: Evidence = { id: 'public-evidence-a', sourceLogicalId: 'incident-guide', sourceTitle: 'Incident guide', sourceType: 'html', content: 'Acknowledge urgent incidents within fifteen minutes and record the incident timeline.', heading: 'Urgent incidents', section: null, page: 2, anchor: 'urgent', score: 0.03 };
 const grounded = () => buildGroundedPrompt('How quickly should an urgent incident be acknowledged?', [evidence]);
 function groqBody(content = '{"claims":[{"text":"Acknowledge urgent incidents within fifteen minutes.","citationIds":["public-evidence-a"]}]}') {
-  return JSON.stringify({ model: GROQ_MODEL, choices: [{ message: { content } }], usage: { prompt_tokens: 123, completion_tokens: 22, total_tokens: 145 } });
+  return JSON.stringify({ model: GROQ_MODEL, choices: [{ message: { content } }], usage: { prompt_tokens: 123, completion_tokens: 22, completion_tokens_details: { reasoning_tokens: 7 }, total_tokens: 145 } });
 }
 function response(status = 200, body = groqBody(), headers?: Record<string, string>): Response { return new Response(body, { status, headers }); }
 
@@ -17,10 +17,10 @@ describe('Groq direct HTTPS provider', () => {
   it('pins the official host/model and strict schema without putting credentials in the JSON body', async () => {
     const fetcher = jest.fn().mockResolvedValue(response()); const provider = adapter(fetcher);
     const result = await provider.generate(grounded(), undefined, { traceId: 'trace-only' });
-    expect(result.metrics).toMatchObject({ inputTokens: 123, outputTokens: 22, totalTokens: 145 });
+    expect(result.metrics).toMatchObject({ inputTokens: 123, outputTokens: 22, reasoningTokens: 7, totalTokens: 145 });
     expect(fetcher).toHaveBeenCalledWith(GROQ_CHAT_COMPLETIONS_URL, expect.objectContaining({ method: 'POST' }));
     const init = fetcher.mock.calls[0]![1]!; const payload = JSON.parse(String(init.body));
-    expect(payload).toMatchObject({ model: GROQ_MODEL, temperature: 0, stream: false, max_completion_tokens: 420, response_format: { type: 'json_schema', json_schema: { strict: true, name: 'relayops_grounded_answer' } } });
+    expect(payload).toMatchObject({ model: GROQ_MODEL, temperature: 0, stream: false, max_completion_tokens: GROQ_MAX_COMPLETION_TOKENS, reasoning_effort: 'low', response_format: { type: 'json_schema', json_schema: { strict: true, name: 'relayops_grounded_answer' } } });
     expect(payload.response_format.json_schema.schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['claims'], properties: { claims: { maxItems: 3, items: { additionalProperties: false, required: ['text', 'citationIds'] } } } });
     expect(payload.messages).toHaveLength(2); expect(payload.messages[0].role).toBe('system'); expect(payload.messages[1].content).toContain('EVIDENCE_DATA_START');
     expect(JSON.stringify(payload)).not.toContain('test-only-key'); expect(JSON.stringify(payload)).not.toContain('GROQ_API_KEY');
@@ -45,13 +45,12 @@ describe('Groq direct HTTPS provider', () => {
     await expect(provider.generate(grounded())).rejects.toMatchObject({ code: 'BAD_REQUEST', providerErrorCode: 'json_schema_failed', providerErrorType: 'invalid_request_error' });
   });
 
-  it('uses at most one same-model JSON-mode retry only for Groq json_validate_failed with identical public messages', async () => {
-    const fetcher = jest.fn().mockResolvedValueOnce(response(400, JSON.stringify({ error: { code: 'json_validate_failed', type: 'invalid_request_error', message: 'never expose this' } }))).mockResolvedValueOnce(response());
-    const result = await adapter(fetcher).generate(grounded());
-    expect(result.metrics?.schemaRetry).toBe(true); expect(fetcher).toHaveBeenCalledTimes(2);
-    const first = JSON.parse(String(fetcher.mock.calls[0]![1]!.body)); const retry = JSON.parse(String(fetcher.mock.calls[1]![1]!.body));
-    expect(first.model).toBe(GROQ_MODEL); expect(retry.model).toBe(GROQ_MODEL); expect(first.messages).toEqual(retry.messages);
-    expect(first.response_format.type).toBe('json_schema'); expect(retry.response_format).toEqual({ type: 'json_object' });
+  it('uses one strict low-reasoning request with a reserved 768-token cap; schema failures never retry or switch JSON mode', async () => {
+    const fetcher = jest.fn().mockResolvedValue(response(400, JSON.stringify({ error: { code: 'json_validate_failed', type: 'invalid_request_error' } })));
+    const limiter = new GroqFreePlanLimiter(); const reserve = jest.spyOn(limiter, 'reserve'); const prompt = grounded();
+    await expect(adapter(fetcher, { limiter }).generate(prompt)).rejects.toMatchObject({ code: 'BAD_REQUEST', providerErrorCode: 'json_validate_failed' });
+    expect(fetcher).toHaveBeenCalledTimes(1); expect(reserve).toHaveBeenCalledWith(Buffer.byteLength(prompt, 'utf8'), GROQ_MAX_COMPLETION_TOKENS);
+    expect(JSON.parse(String(fetcher.mock.calls[0]![1]!.body))).toMatchObject({ model: GROQ_MODEL, max_completion_tokens: GROQ_MAX_COMPLETION_TOKENS, reasoning_effort: 'low', response_format: { type: 'json_schema', json_schema: { strict: true } } });
   });
 
   it('keeps request diagnostics out of normal provider observability', async () => {
@@ -59,7 +58,7 @@ describe('Groq direct HTTPS provider', () => {
     await provider.generate(grounded(), undefined, { traceId: 'trace-only' });
     const event = observer.mock.calls[0]![0] as Record<string, unknown>;
     expect(event).toMatchObject({ traceId: 'trace-only', provider: 'groq', model: GROQ_MODEL, statusClass: 'ok' });
-    expect(event).not.toHaveProperty('requestBytes'); expect(event).not.toHaveProperty('boundedPromptBytes'); expect(event).not.toHaveProperty('schemaBytes'); expect(event).not.toHaveProperty('schemaRetry');
+    expect(event).not.toHaveProperty('requestBytes'); expect(event).not.toHaveProperty('boundedPromptBytes'); expect(event).not.toHaveProperty('schemaBytes'); expect(event).not.toHaveProperty('reasoningTokens');
   });
 
   it('maps 429 and Retry-After without sleeping or retrying', async () => {

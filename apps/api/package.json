@@ -27,7 +27,9 @@
     "evaluation:real-groq": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts real-groq",
     "evaluation:groq-smoke": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-smoke",
     "evaluation:groq-regression": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-regression",
-    "evaluation:groq-diagnose": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-diagnose"
+    "evaluation:groq-diagnose": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-diagnose",
+    "evaluation:groq-reasoning-budget-diagnose": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-reasoning-budget-diagnose",
+    "evaluation:groq-reasoning-budget-verify": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-reasoning-budget-verify"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",
