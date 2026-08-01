@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TradeType {
+  HVAC
+  PLUMBING
+  ELECTRICAL
+  REPAIR
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  DISPATCHER
+  TECHNICIAN
+  VIEWER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+model User {
+  id          String                   @id @default(uuid()) @db.Uuid
+  email       String                   @unique
+  name        String
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  memberships OrganizationMembership[]
+  technician  Technician?
+  openedTickets SupportTicket[]
+
+  @@map("users")
+}
+
+model Organization {
+  id            String                   @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String                   @unique
+  trade         TradeType
+  city          String
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  memberships   OrganizationMembership[]
+  subscription  Subscription?
+  customers     Customer[]
+  technicians   Technician[]
+  jobs          Job[]
+  supportTickets SupportTicket[]
+
+  @@map("organizations")
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  role           MembershipRole
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_memberships")
+}
+
+model Plan {
+  id            String         @id @default(uuid()) @db.Uuid
+  code          String         @unique
+  name          String
+  seatLimit     Int            @map("seat_limit")
+  monthlyCents  Int            @map("monthly_cents")
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @unique @map("organization_id") @db.Uuid
+  planId         String             @map("plan_id") @db.Uuid
+  status         SubscriptionStatus
+  startedAt      DateTime           @map("started_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan           Plan               @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+model Customer {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String
+  email          String?
+  phone          String
+  address        String
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobs           Job[]
+  supportTickets SupportTicket[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@map("customers")
+}
+
+model Technician {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String?      @unique @map("user_id") @db.Uuid
+  name           String
+  email          String
+  specialty      String
+  active         Boolean      @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
+  jobs           Job[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("technicians")
+}
+
+model Job {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  customerId     String       @map("customer_id") @db.Uuid
+  technicianId   String?      @map("technician_id") @db.Uuid
+  reference      String
+  title          String
+  description    String
+  status         JobStatus
+  scheduledFor   DateTime     @map("scheduled_for")
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [organizationId, customerId], references: [organizationId, id])
+  technician     Technician?  @relation(fields: [organizationId, technicianId], references: [organizationId, id])
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, reference])
+  @@index([organizationId, status])
+  @@map("jobs")
+}
+
+model SupportTicket {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  customerId     String?        @map("customer_id") @db.Uuid
+  openedById     String         @map("opened_by_id") @db.Uuid
+  reference      String
+  subject        String
+  body           String
+  status         TicketStatus
+  priority       TicketPriority @default(NORMAL)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer?      @relation(fields: [organizationId, customerId], references: [organizationId, id])
+  openedBy       User           @relation(fields: [openedById], references: [id])
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, reference])
+  @@index([organizationId, status])
+  @@map("support_tickets")
+}

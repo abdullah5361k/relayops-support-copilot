@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: relayops
+      POSTGRES_DB: relayops
+      # Local-only trust auth; the host port is bound to loopback below.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:${RELAYOPS_DB_PORT:-55432}:5432"
+    volumes:
+      - relayops_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relayops -d relayops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  relayops_postgres:
