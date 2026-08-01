@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint app components lib __tests__",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@relayops/contracts": "workspace:*",
@@ -18,6 +19,7 @@
     "react-dom": "19.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.1",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.3.0",
     "@testing-library/user-event": "14.6.1",

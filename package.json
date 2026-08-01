@@ -22,8 +22,11 @@
     "lint": "eslint .",
     "typecheck": "pnpm build:packages && pnpm --filter @relayops/api typecheck && pnpm --filter @relayops/web typecheck",
     "test": "pnpm build:packages && pnpm --filter @relayops/api test && pnpm --filter @relayops/web test",
+    "test:integration": "pnpm build:packages && pnpm --filter @relayops/api test:integration",
+    "test:e2e": "pnpm build:packages && pnpm --filter @relayops/web test:e2e",
     "db:generate": "pnpm --filter @relayops/api prisma:generate",
     "db:migrate": "pnpm --filter @relayops/api prisma:migrate",
+    "db:deploy": "pnpm --filter @relayops/api prisma:deploy",
     "db:seed": "pnpm --filter @relayops/api prisma:seed",
     "db:reset": "pnpm --filter @relayops/api prisma:reset"
   },

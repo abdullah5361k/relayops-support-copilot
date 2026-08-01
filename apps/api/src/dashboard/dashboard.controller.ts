@@ -28,6 +28,16 @@ export class DashboardController {
     return this.dashboardService.team(tenant);
   }
 
+  @Get('customers')
+  customers(@TenantContext() tenant: TenantContextValue) {
+    return this.dashboardService.customers(tenant);
+  }
+
+  @Get('customers/:id')
+  customer(@TenantContext() tenant: TenantContextValue, @Param('id') id: string) {
+    return this.dashboardService.customer(tenant, id);
+  }
+
   @Get('subscription')
   subscription(@TenantContext() tenant: TenantContextValue) {
     return this.dashboardService.subscription(tenant);
