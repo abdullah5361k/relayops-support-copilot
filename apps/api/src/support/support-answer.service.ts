@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccountToolReadResult, SupportAccountEvidence, SupportAccountToolPlan, SupportAnswerResponse, SupportCitation, SupportProviderStatus, SupportRefusalReason } from '@relayops/contracts';
+import type { AccountToolReadResult, DocumentationEvidenceReference, SupportAccountEvidence, SupportAccountToolPlan, SupportAnswerResponse, SupportCitation, SupportProviderStatus, SupportRefusalReason } from '@relayops/contracts';
 import { AccountToolException } from '../account-tools/account-tool.exception';
 import { AccountToolService } from '../account-tools/account-tool.service';
 import { DemoSessionResolver } from '../auth/demo-session.resolver';
@@ -119,13 +119,19 @@ function accountEvidence(result: AccountToolReadResult): SupportAccountEvidence 
   return { kind: result.kind, label: 'Support ticket status', reference: result.reference, status: result.status };
 }
 function isHandoffRequest(question: string): boolean { return /\b(handoff|human|person|support ticket|escalat)/i.test(question); }
+/** Narrow action-intent classifier: direct documentation questions stay on the validated generation path. */
+export function isExplicitHandoffOnlyRequest(question: string): boolean {
+  if (!isHandoffRequest(question) || /\?|\b(how|what|when|where|which|why)\b/i.test(question)) return false;
+  return /^\s*(?:please\s+)?(?:(?:i\s+)?(?:need|want|would\s+like)\s+(?:a\s+)?(?:human|person|handoff)|(?:can\s+you\s+)?(?:connect|transfer)\s+me\s+(?:to|with)\s+(?:a\s+)?(?:human|person))\b/i.test(question);
+}
+export const HANDOFF_INCIDENT_DOCUMENTATION_QUESTION = 'What does the public documentation say about urgent incident acknowledgement?';
 /**
  * Handoff availability stays server-owned. The external prompt gets only a canonical public-doc topic,
  * never the requester's human/handoff wording or any account/session material.
  */
 export function publicDocumentationGenerationQuestion(question: string): string {
   if (!isHandoffRequest(question)) return question;
-  if (/\b(acknowledg|incident|interruption|outage|urgent)\b/i.test(question)) return 'What does the public documentation say about urgent incident acknowledgement?';
+  if (/\b(acknowledg|incident|interruption|outage|urgent)\b/i.test(question)) return HANDOFF_INCIDENT_DOCUMENTATION_QUESTION;
   if (/\b(job|intake|dispatch|visit)\b/i.test(question)) return 'What does the public documentation say about job intake?';
   return 'What public documentation guidance is supported by the supplied evidence?';
 }
@@ -163,8 +169,8 @@ export class SupportAnswerService {
     if (this.provider.provider === 'ollama') return { provider: 'ollama', model: 'qwen3:4b', available };
     return { provider: 'disabled', model: 'disabled', available };
   }
-  private response(traceId: string, state: SupportAnswerResponse['state'], answer: string | null, citations: SupportCitation[], account: SupportAccountEvidence[], plan: SupportAccountToolPlan | null, reason: SupportRefusalReason | null, suggestedTopics: string[], available: boolean, handoffAvailable = false): SupportAnswerResponse {
-    return { traceId, state, answer, citations, accountEvidence: account, accountToolPlan: plan, handoffAvailable, refusalReason: reason, suggestedTopics, provider: this.providerStatus(available) };
+  private response(traceId: string, state: SupportAnswerResponse['state'], answer: string | null, citations: SupportCitation[], account: SupportAccountEvidence[], plan: SupportAccountToolPlan | null, reason: SupportRefusalReason | null, suggestedTopics: string[], available: boolean, handoffAvailable = false, handoffPreviewEvidence: DocumentationEvidenceReference[] = []): SupportAnswerResponse {
+    return { traceId, state, answer, citations, accountEvidence: account, accountToolPlan: plan, handoffPreviewEvidence, handoffAvailable, refusalReason: reason, suggestedTopics, provider: this.providerStatus(available) };
   }
   private async audit(traceId: string, response: SupportAnswerResponse, startedAt: number, error?: GenerationProviderError, metrics?: GenerationMetrics): Promise<void> {
     try {
@@ -180,6 +186,10 @@ export class SupportAnswerService {
     if (!this.accountTools) throw new Error('Account tools unavailable');
     const result = plan.tool === 'subscription_seat_usage' ? await this.accountTools.subscriptionSeatUsage(tenant) : plan.tool === 'job_status' ? await this.accountTools.jobStatus(tenant, plan.arguments.reference) : await this.accountTools.supportTicketStatus(tenant, plan.arguments.reference);
     return accountEvidence(result);
+  }
+
+  private previewEvidence(evidence: readonly Evidence[]): DocumentationEvidenceReference[] {
+    return evidence.slice(0, MAX_GENERATION_EVIDENCE).map((item) => item.anchor ? { sourceId: item.sourceLogicalId, locator: item.anchor } : { sourceId: item.sourceLogicalId });
   }
 
   private async documentation(question: string, traceId: string, options: AnswerOptions): Promise<{ validated?: { answer: string; citations: SupportCitation[] }; evidence: Evidence[]; error?: GenerationProviderError; metrics?: GenerationMetrics; refused?: boolean; invalidOutput?: boolean }> {
@@ -225,6 +235,48 @@ export class SupportAnswerService {
         else response = this.response(traceId, 'ERROR', null, [], [], plan, 'RETRIEVAL_UNAVAILABLE', [], false);
       }
       await this.audit(traceId, response, startedAt, providerError, metrics); return response;
+    }
+
+    // Explicit unsafe/injection requests must not be reinterpreted as handoff actions.
+    if (requiresPreGenerationRefusal(question)) {
+      response = this.response(traceId, 'REFUSED', null, [], [], null, 'INSUFFICIENT_EVIDENCE', [], false);
+      await this.audit(traceId, response, startedAt); return response;
+    }
+    // An authenticated, explicit handoff-only request is an action offer, never a documentation-generation task.
+    // Its optional source references are public preview metadata only; no draft or ticket is created here.
+    if (isExplicitHandoffOnlyRequest(question)) {
+      options.onStage?.('planning', traceId);
+      if (options.signal?.aborted) {
+        response = this.response(traceId, 'ERROR', null, [], [], null, 'CANCELLED', [], false);
+        await this.audit(traceId, response, startedAt); return response;
+      }
+      const authenticated = Boolean(options.headers && this.sessions && await this.sessions.resolve(options.headers));
+      if (options.signal?.aborted) {
+        response = this.response(traceId, 'ERROR', null, [], [], null, 'CANCELLED', [], false);
+        await this.audit(traceId, response, startedAt); return response;
+      }
+      if (!authenticated) {
+        response = this.response(traceId, 'REFUSED', null, [], [], null, 'ACCOUNT_SIGN_IN_REQUIRED', [], false);
+        await this.audit(traceId, response, startedAt); return response;
+      }
+      let preview: DocumentationEvidenceReference[] = [];
+      try {
+        options.onStage?.('retrieving', traceId);
+        const evidence = await this.retrieval.searchPublic(publicDocumentationGenerationQuestion(question), this.embedder, MAX_EVIDENCE);
+        if (options.signal?.aborted) {
+          response = this.response(traceId, 'ERROR', null, [], [], null, 'CANCELLED', [], false);
+          await this.audit(traceId, response, startedAt); return response;
+        }
+        preview = this.previewEvidence(evidence);
+      } catch {
+        if (options.signal?.aborted) {
+          response = this.response(traceId, 'ERROR', null, [], [], null, 'CANCELLED', [], false);
+          await this.audit(traceId, response, startedAt); return response;
+        }
+        // The action offer is still safe and useful without optional public preview metadata.
+      }
+      response = this.response(traceId, 'ANSWERED', 'A synthetic handoff can be prepared for your review. No ticket has been created.', [], [], null, null, [], false, true, preview);
+      await this.audit(traceId, response, startedAt); return response;
     }
 
     let evidence: Evidence[] = [];

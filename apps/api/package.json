@@ -30,7 +30,8 @@
     "evaluation:groq-diagnose": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-diagnose",
     "evaluation:groq-reasoning-budget-diagnose": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-reasoning-budget-diagnose",
     "evaluation:groq-reasoning-budget-verify": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-reasoning-budget-verify",
-    "evaluation:groq-handoff-prompt-verify": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-handoff-prompt-verify"
+    "evaluation:groq-handoff-prompt-verify": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-handoff-prompt-verify",
+    "evaluation:groq-confirm-only-canonical": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts groq-confirm-only-canonical"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",

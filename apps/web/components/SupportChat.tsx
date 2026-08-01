@@ -10,7 +10,7 @@ const prompts = [
   { label: 'Show my current seat usage', question: 'Why can’t I add another technician to my current subscription?' },
   { label: 'Ask outside the evidence', question: 'Give me a competitor pricing comparison.' }
 ];
-type Answer = { text: string; citations: Citation[]; accountEvidence: AccountEvidence[]; handoffAvailable: boolean; accountToolPlan: { tool: 'subscription_seat_usage'; arguments: Record<string, never> } | { tool: 'job_status'; arguments: { reference: string } } | { tool: 'support_ticket_status'; arguments: { reference: string } } | null };
+type Answer = { text: string; citations: Citation[]; accountEvidence: AccountEvidence[]; handoffPreviewEvidence: Array<{ sourceId: string; locator?: string }>; handoffAvailable: boolean; accountToolPlan: { tool: 'subscription_seat_usage'; arguments: Record<string, never> } | { tool: 'job_status'; arguments: { reference: string } } | { tool: 'support_ticket_status'; arguments: { reference: string } } | null };
 
 export function SupportChat({ embedded = false, initialOpen = false }: Props) {
   const [open, setOpen] = useState(initialOpen || embedded); const [question, setQuestion] = useState(''); const [sent, setSent] = useState('');
@@ -39,7 +39,7 @@ export function SupportChat({ embedded = false, initialOpen = false }: Props) {
     if (event.type === 'final') {
       const result = event.response;
       if (result.state !== 'ANSWERED' || !result.answer?.trim() || result.citations.some((item) => !isCitation(item))) { setFailure({ code: 'malformed-response', message: 'The server did not provide a valid final answer. No answer was accepted.', retryable: true }); return { started, terminal: true }; }
-      setAnswer({ text: result.answer, citations: result.citations, accountEvidence: result.accountEvidence, handoffAvailable: result.handoffAvailable, accountToolPlan: result.accountToolPlan }); return { started, terminal: true };
+      setAnswer({ text: result.answer, citations: result.citations, accountEvidence: result.accountEvidence, handoffPreviewEvidence: result.handoffPreviewEvidence, handoffAvailable: result.handoffAvailable, accountToolPlan: result.accountToolPlan }); return { started, terminal: true };
     }
     if (event.type === 'refusal') { setRefusal(event.response.refusalReason === 'ACCOUNT_SIGN_IN_REQUIRED' ? 'Select a supplied demo identity to request account evidence. Public documentation questions remain available without sign-in.' : 'No grounded answer is available from the active public evidence.'); return { started, terminal: true }; }
     if (event.type === 'error') { setFailure({ code: event.code, message: event.message, retryable: event.retryable }); return { started, terminal: true }; }
@@ -51,7 +51,9 @@ export function SupportChat({ embedded = false, initialOpen = false }: Props) {
   function reset() { controllerRef.current?.abort(); setSent(''); setAnswer(null); setRefusal(null); setFailure(null); setCancelled(false); setHandoff(null); setHandoffState('idle'); setTicket(null); setLastQuestion(null); inputRef.current?.focus(); }
   async function prepareHandoff() {
     if (!answer || !sent) return; setHandoffState('preparing');
-    try { setHandoff(await relayOpsService.support.previewHandoff({ summary: `Question: ${sent}`.slice(0, 600), conversationExcerpt: answer.text.slice(0, 1000), documentationEvidence: answer.citations.map((item) => ({ sourceId: item.sourceLogicalId, ...(item.anchor ? { locator: item.anchor } : {}) })), ...(answer.accountToolPlan ? { accountToolPlan: answer.accountToolPlan } : {}) })); setHandoffState('idle'); }
+    const documentationEvidence = [...answer.citations.map((item) => ({ sourceId: item.sourceLogicalId, ...(item.anchor ? { locator: item.anchor } : {}) })), ...answer.handoffPreviewEvidence]
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.sourceId === item.sourceId && candidate.locator === item.locator) === index);
+    try { setHandoff(await relayOpsService.support.previewHandoff({ summary: `Question: ${sent}`.slice(0, 600), conversationExcerpt: answer.text.slice(0, 1000), documentationEvidence, ...(answer.accountToolPlan ? { accountToolPlan: answer.accountToolPlan } : {}) })); setHandoffState('idle'); }
     catch { setHandoffState('error'); }
   }
   async function confirmHandoff() { if (!handoff) return; setHandoffState('confirming'); try { const result = await relayOpsService.support.confirmHandoff(handoff.draftId); setTicket(result.ticket.reference); setHandoffState('success'); } catch { setHandoffState('error'); } }

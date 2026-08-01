@@ -86,16 +86,35 @@ describe('grounded support generation', () => {
     expect(model.status).not.toHaveBeenCalled(); expect(model.generate).not.toHaveBeenCalled(); expect(retrieval.searchPublic).not.toHaveBeenCalled();
   });
 
-  it('uses a canonical public documentation topic for a human-requested handoff while server-owned availability remains separate', async () => {
+  it('keeps a combined direct documentation question on the validated canonical generation path', async () => {
     const model = provider(); const retrieval = { searchPublic: jest.fn().mockResolvedValue([evidence()]) }; const audit = { supportAnswerTrace: { create: jest.fn().mockResolvedValue({}) } };
     const sessions = { resolve: jest.fn().mockResolvedValue({ organizationId: 'tenant-id-sentinel' }) };
     const instance = new SupportAnswerService(retrieval as never, audit as never, { modelId: 'test', modelVersion: 'v1', embed: async () => [] }, model, undefined, sessions as never);
-    const result = await instance.answer('I need a human handoff about urgent incident acknowledgement.', { headers: { cookie: 'relayops_demo_session=secret-session-sentinel' } });
+    const result = await instance.answer('How quickly is a confirmed urgent interruption acknowledged? I need a human handoff.', { headers: { cookie: 'relayops_demo_session=secret-session-sentinel' } });
     expect(result).toMatchObject({ state: 'ANSWERED', citations: [{ evidenceId: 'chunk-a' }], handoffAvailable: true });
     expect(retrieval.searchPublic).toHaveBeenCalledWith('What does the public documentation say about urgent incident acknowledgement?', expect.anything(), 4);
     const generatedQuestion = String((model.generate as jest.Mock).mock.calls[0]![0]).match(/QUESTION_START\n([\s\S]*?)\nQUESTION_END/)?.[1];
     expect(generatedQuestion).toBe('What does the public documentation say about urgent incident acknowledgement?');
     expect(generatedQuestion).not.toMatch(/human|handoff|tenant|session|create|execut/i);
+  });
+
+  it('offers an authenticated explicit handoff without a provider call or a substantive claim', async () => {
+    const model = provider(); const retrieval = { searchPublic: jest.fn().mockResolvedValue([evidence()]) }; const audit = { supportAnswerTrace: { create: jest.fn().mockResolvedValue({}) } };
+    const sessions = { resolve: jest.fn().mockResolvedValue({ organizationId: 'tenant-id-sentinel' }) };
+    const instance = new SupportAnswerService(retrieval as never, audit as never, { modelId: 'test', modelVersion: 'v1', embed: async () => [] }, model, undefined, sessions as never);
+    const result = await instance.answer('I need a human handoff about urgent incident acknowledgement.', { headers: { cookie: 'relayops_demo_session=secret-session-sentinel' } });
+    expect(result).toEqual(expect.objectContaining({ state: 'ANSWERED', answer: 'A synthetic handoff can be prepared for your review. No ticket has been created.', citations: [], accountEvidence: [], accountToolPlan: null, handoffAvailable: true, handoffPreviewEvidence: [{ sourceId: 'incident-guide', locator: 'urgent' }] }));
+    expect(retrieval.searchPublic).toHaveBeenCalledWith('What does the public documentation say about urgent incident acknowledgement?', expect.anything(), 4);
+    expect(model.status).not.toHaveBeenCalled(); expect(model.generate).not.toHaveBeenCalled();
+  });
+
+  it('requires an authenticated session and honors cancellation for a handoff-only offer without a provider call', async () => {
+    const model = provider(); const retrieval = { searchPublic: jest.fn().mockResolvedValue([evidence()]) }; const audit = { supportAnswerTrace: { create: jest.fn().mockResolvedValue({}) } };
+    const unauthenticated = new SupportAnswerService(retrieval as never, audit as never, { modelId: 'test', modelVersion: 'v1', embed: async () => [] }, model, undefined, { resolve: jest.fn().mockResolvedValue(null) } as never);
+    await expect(unauthenticated.answer('I need a human handoff about urgent incident acknowledgement.', { headers: { cookie: 'invalid' } })).resolves.toMatchObject({ state: 'REFUSED', refusalReason: 'ACCOUNT_SIGN_IN_REQUIRED', handoffAvailable: false });
+    const abort = new AbortController(); abort.abort();
+    await expect(unauthenticated.answer('I need a human handoff about urgent incident acknowledgement.', { headers: { cookie: 'invalid' }, signal: abort.signal })).resolves.toMatchObject({ state: 'ERROR', refusalReason: 'CANCELLED', handoffAvailable: false });
+    expect(retrieval.searchPublic).not.toHaveBeenCalled(); expect(model.status).not.toHaveBeenCalled(); expect(model.generate).not.toHaveBeenCalled();
   });
 });
 

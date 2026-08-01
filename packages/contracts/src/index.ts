@@ -216,6 +216,8 @@ export interface SupportAnswerResponse {
   citations: SupportCitation[];
   accountEvidence: SupportAccountEvidence[];
   accountToolPlan: SupportAccountToolPlan | null;
+  /** Server-selected PUBLIC source references for an optional handoff preview only; they do not support an answer claim. */
+  handoffPreviewEvidence: DocumentationEvidenceReference[];
   handoffAvailable: boolean;
   refusalReason: SupportRefusalReason | null;
   suggestedTopics: string[];

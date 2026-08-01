@@ -43,10 +43,17 @@ export function isCitation(value: unknown): value is Citation {
     && (item.heading === null || typeof item.heading === 'string') && (item.section === null || typeof item.section === 'string')
     && (item.page === null || Number.isInteger(item.page)) && (item.anchor === null || typeof item.anchor === 'string');
 }
+function isPreviewEvidence(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const reference = value as Record<string, unknown>;
+  return typeof reference.sourceId === 'string' && reference.sourceId.length > 0 && reference.sourceId.length <= 120
+    && (reference.locator === undefined || typeof reference.locator === 'string' && reference.locator.length <= 120);
+}
 export function isValidatedAnswer(value: unknown): value is SupportAnswerResponse {
   if (!value || typeof value !== 'object') return false;
   const answer = value as Partial<SupportAnswerResponse>;
   return typeof answer.traceId === 'string' && (answer.state === 'ANSWERED' || answer.state === 'REFUSED' || answer.state === 'ERROR')
     && Array.isArray(answer.citations) && answer.citations.every(isCitation) && Array.isArray(answer.accountEvidence)
+    && Array.isArray(answer.handoffPreviewEvidence) && answer.handoffPreviewEvidence.every(isPreviewEvidence)
     && (answer.answer === null || typeof answer.answer === 'string') && (answer.refusalReason === null || typeof answer.refusalReason === 'string');
 }
