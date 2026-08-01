@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobStatus, MembershipStatus } from '@prisma/client';
-import type { DashboardData, DashboardJob, SupportTicketSummary, TeamMember } from '@relayops/contracts';
+import { JobStatus, MembershipStatus, TicketStatus } from '@prisma/client';
+import type {
+  CustomerSummary,
+  DashboardData,
+  DashboardJob,
+  SubscriptionSummary,
+  SupportTicketSummary,
+  TeamMember
+} from '@relayops/contracts';
 import type { TenantContextValue } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,15 +21,7 @@ export class DashboardService {
       include: { customer: true, technician: true },
       orderBy: { scheduledFor: 'asc' }
     });
-    return jobs.map((job) => ({
-      id: job.id,
-      reference: job.reference,
-      title: job.title,
-      customerName: job.customer.name,
-      technicianName: job.technician?.name ?? null,
-      status: job.status,
-      scheduledFor: job.scheduledFor.toISOString()
-    }));
+    return jobs.map((job) => this.mapJob(job));
   }
 
   async job(tenant: TenantContextValue, id: string): Promise<DashboardJob> {
@@ -31,15 +30,7 @@ export class DashboardService {
       include: { customer: true, technician: true }
     });
     if (!job) throw new NotFoundException('Job not found');
-    return {
-      id: job.id,
-      reference: job.reference,
-      title: job.title,
-      customerName: job.customer.name,
-      technicianName: job.technician?.name ?? null,
-      status: job.status,
-      scheduledFor: job.scheduledFor.toISOString()
-    };
+    return this.mapJob(job);
   }
 
   async team(tenant: TenantContextValue): Promise<TeamMember[]> {
@@ -56,7 +47,31 @@ export class DashboardService {
     }));
   }
 
-  async subscription(tenant: TenantContextValue) {
+  async customers(tenant: TenantContextValue): Promise<CustomerSummary[]> {
+    const customers = await this.prisma.customer.findMany({
+      where: { organizationId: tenant.organizationId },
+      include: {
+        _count: { select: { jobs: true } },
+        jobs: { select: { scheduledFor: true }, orderBy: { scheduledFor: 'desc' }, take: 1 }
+      },
+      orderBy: { name: 'asc' }
+    });
+    return customers.map((customer) => this.mapCustomer(customer));
+  }
+
+  async customer(tenant: TenantContextValue, id: string): Promise<CustomerSummary> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { organizationId_id: { organizationId: tenant.organizationId, id } },
+      include: {
+        _count: { select: { jobs: true } },
+        jobs: { select: { scheduledFor: true }, orderBy: { scheduledFor: 'desc' }, take: 1 }
+      }
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return this.mapCustomer(customer);
+  }
+
+  async subscription(tenant: TenantContextValue): Promise<SubscriptionSummary> {
     const [subscription, seatsUsed] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { organizationId: tenant.organizationId },
@@ -71,33 +86,39 @@ export class DashboardService {
       planName: subscription.plan.name,
       seatsUsed,
       seatLimit: subscription.plan.seatLimit,
-      status: subscription.status
+      status: subscription.status,
+      monthlyCents: subscription.plan.monthlyCents,
+      startedAt: subscription.startedAt.toISOString()
     };
   }
 
   async tickets(tenant: TenantContextValue): Promise<SupportTicketSummary[]> {
     const tickets = await this.prisma.supportTicket.findMany({
       where: { organizationId: tenant.organizationId },
-      orderBy: { createdAt: 'desc' }
+      include: { openedBy: true },
+      orderBy: { updatedAt: 'desc' }
     });
     return tickets.map((ticket) => ({
       id: ticket.id,
       reference: ticket.reference,
       subject: ticket.subject,
+      requesterName: ticket.openedBy.name,
       status: ticket.status,
-      createdAt: ticket.createdAt.toISOString()
+      createdAt: ticket.createdAt.toISOString(),
+      updatedAt: ticket.updatedAt.toISOString()
     }));
   }
 
   async dashboard(tenant: TenantContextValue): Promise<DashboardData> {
-    const [organization, jobs, team, subscription, tickets, activeCustomers, completedJobs] = await Promise.all([
+    const [organization, jobs, team, subscription, tickets, activeCustomers, completedJobs, openTickets] = await Promise.all([
       this.prisma.organization.findUnique({ where: { id: tenant.organizationId } }),
       this.jobs(tenant),
       this.team(tenant),
       this.subscription(tenant),
       this.tickets(tenant),
       this.prisma.customer.count({ where: { organizationId: tenant.organizationId, active: true } }),
-      this.prisma.job.count({ where: { organizationId: tenant.organizationId, status: JobStatus.COMPLETED } })
+      this.prisma.job.count({ where: { organizationId: tenant.organizationId, status: JobStatus.COMPLETED } }),
+      this.prisma.supportTicket.count({ where: { organizationId: tenant.organizationId, status: { not: TicketStatus.RESOLVED } } })
     ]);
     if (!organization) throw new NotFoundException('Organization not found');
 
@@ -107,12 +128,44 @@ export class DashboardService {
       metrics: {
         openJobs: jobs.filter((job) => job.status === 'SCHEDULED' || job.status === 'IN_PROGRESS').length,
         completedThisMonth: completedJobs,
-        activeCustomers
+        activeCustomers,
+        openTickets
       },
       subscription,
       jobs,
       team,
       tickets
+    };
+  }
+
+  private mapJob(job: {
+    id: string; reference: string; title: string; status: JobStatus; scheduledFor: Date;
+    customer: { name: string }; technician: { name: string } | null;
+  }): DashboardJob {
+    return {
+      id: job.id,
+      reference: job.reference,
+      title: job.title,
+      customerName: job.customer.name,
+      technicianName: job.technician?.name ?? null,
+      status: job.status,
+      scheduledFor: job.scheduledFor.toISOString()
+    };
+  }
+
+  private mapCustomer(customer: {
+    id: string; name: string; email: string | null; phone: string; address: string; active: boolean;
+    _count: { jobs: number }; jobs: { scheduledFor: Date }[];
+  }): CustomerSummary {
+    return {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      active: customer.active,
+      jobCount: customer._count.jobs,
+      lastServiceAt: customer.jobs[0]?.scheduledFor.toISOString() ?? null
     };
   }
 }

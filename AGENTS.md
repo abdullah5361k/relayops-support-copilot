@@ -3,8 +3,8 @@
 - Preserve the zero-cost rule: no paid API, billing requirement, secret, cloud resource, or mandatory external account. See `README.md` for scope and setup.
 - Use only original RelayOps branding and deterministic synthetic data; never imply unbuilt AI, production auth, deployment, or customer outcomes exist.
 - Derive API tenant context server-side. Every private data model and query must be organization-scoped; keep isolation tests beside API changes.
-- Route UI dashboard/help/chat data through `RelayOpsAdapter` (`apps/web/lib/contracts.ts`); `apps/web/lib/service.ts` is the sole adapter binding. The UI remains mock-backed until a separate integration milestone.
-- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` before review. Prisma workflow is documented in `README.md`.
+- Route UI data through `RelayOpsAdapter` (`apps/web/lib/contracts.ts`); `apps/web/lib/service.ts` is the sole binding. Private/session methods use `api-adapter.ts`; only clearly labeled help/chat/Knowledge fixtures belong in `static-content.ts`. See `docs/INTEGRATION.md`.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` before review. With seeded PostgreSQL, also run `pnpm test:integration` and `pnpm test:e2e`; exact setup is in `README.md`.
 
 ## Maintaining this file
 

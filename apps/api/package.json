@@ -9,9 +9,11 @@
     "lint": "eslint src test prisma/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest --runInBand",
+    "test:integration": "dotenv -e ../../.env -- env RUN_INTEGRATION_TESTS=1 jest --runInBand test/integration.e2e.spec.ts",
     "test:watch": "jest --watch",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "prisma:seed": "dotenv -e ../../.env -- prisma db seed",
     "prisma:reset": "dotenv -e ../../.env -- prisma migrate reset"
   },

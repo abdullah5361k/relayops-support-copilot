@@ -1,5 +1,8 @@
 import type { RelayOpsAdapter } from "./contracts";
-import { mockAdapter } from "./mock-adapter";
+import { createApiAdapter } from "./api-adapter";
 
-/** Single replaceable boundary for all UI data. See docs/INTEGRATION.md. */
-export const relayOpsService: RelayOpsAdapter = mockAdapter;
+/**
+ * Sole UI binding. Private workspace/session methods call the Nest API; only
+ * public help, Knowledge, and prewritten chat scenarios remain local static content.
+ */
+export const relayOpsService: RelayOpsAdapter = createApiAdapter();

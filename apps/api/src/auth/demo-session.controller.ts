@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Post, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Post, Res, UseGuards } from '@nestjs/common';
 import type { DemoIdentity, DemoSessionResponse } from '@relayops/contracts';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { demoProfiles, demoSessionCookie } from './demo-identities';
+import { DemoSessionGuard } from './demo-session.guard';
+import { TenantContext, type TenantContextValue } from './tenant-context';
 
 @Controller('demo')
 export class DemoSessionController {
@@ -11,6 +13,20 @@ export class DemoSessionController {
   @Get('identities')
   identities() {
     return demoProfiles.map(({ identity, label }) => ({ identity, label }));
+  }
+
+  @Get('session')
+  @UseGuards(DemoSessionGuard)
+  current(@TenantContext() tenant: TenantContextValue): DemoSessionResponse {
+    const profile = demoProfiles.find((candidate) => candidate.email === tenant.userEmail);
+    if (!profile) throw new BadRequestException('Demo identity is unavailable');
+    return {
+      identity: profile.identity as DemoIdentity,
+      userName: tenant.userName,
+      userEmail: tenant.userEmail,
+      role: tenant.role,
+      organizationName: profile.label
+    };
   }
 
   @Post('session')
@@ -38,6 +54,8 @@ export class DemoSessionController {
     return {
       identity: profile.identity as DemoIdentity,
       userName: membership.user.name,
+      userEmail: membership.user.email,
+      role: membership.role,
       organizationName: membership.organization.name
     };
   }
