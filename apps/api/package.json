@@ -1,0 +1,42 @@
+{
+  "name": "@relayops/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- nest start --watch",
+    "build": "nest build",
+    "start": "dotenv -e ../../.env -- node dist/main.js",
+    "lint": "eslint src test prisma/seed.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "prisma:seed": "dotenv -e ../../.env -- prisma db seed",
+    "prisma:reset": "dotenv -e ../../.env -- prisma migrate reset"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "@prisma/client": "6.19.3",
+    "@relayops/contracts": "workspace:*",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.24",
+    "@nestjs/testing": "11.1.28",
+    "@types/express": "5.0.6",
+    "@types/jest": "30.0.0",
+    "@types/node": "22.17.1",
+    "jest": "30.4.2",
+    "prisma": "6.19.3",
+    "ts-jest": "29.4.12",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.2"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  }
+}
