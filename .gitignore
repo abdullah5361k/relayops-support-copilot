@@ -15,3 +15,6 @@ coverage/
 # Browser test artifacts
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Local Hugging Face/Transformers artifacts are intentionally never committed.
+.relayops-model-cache/

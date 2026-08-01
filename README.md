@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help, Knowledge, and support-chat scenarios remain clearly labeled local static demonstrations. There is no RAG, LLM/model inference, document ingestion, embeddings, live citation system, production authentication, deployment, billing, or real customer outcome.
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help, Knowledge, and support-chat scenarios remain clearly labeled local static demonstrations. Phase 1 adds a local-only, versioned public-corpus retrieval foundation that returns evidence; it does not connect RAG answers to the product UI or run generation.
 
 ## Zero-cost scope
 
@@ -10,7 +10,8 @@ Everything runs locally with open-source tools and no account, secret, billing d
 
 - Node.js 22, pnpm, TypeScript
 - Next.js and NestJS
-- Prisma and PostgreSQL 16 with the open-source pgvector extension available for a later milestone
+- Prisma and PostgreSQL 16 with open-source pgvector
+- Local `Xenova/all-MiniLM-L6-v2` embeddings through `@huggingface/transformers` (intentional first-run public download; no API key)
 - Jest, Vitest, and Playwright
 
 Fictional subscription rows never trigger billing. GitHub Actions is included for free public-repository CI; local commands remain authoritative and CI availability depends on GitHub's public-repository runner policy.
@@ -69,7 +70,7 @@ pnpm db:seed       # replace demo rows with deterministic synthetic data
 pnpm db:reset      # destructive local reset, migrate, and seed
 ```
 
-The initial migration enables pgvector for a later milestone. No vectors or embeddings are stored or queried now.
+The knowledge migration stores normalized `vector(384)` MiniLM embeddings for an original committed public corpus. See [`docs/RAG.md`](docs/RAG.md) for lifecycle, security boundaries, cache/offline behavior, corpus licensing, and retrieval decisions.
 
 ## Demo-session journey
 
@@ -134,9 +135,24 @@ Playwright starts the real API and web processes and runs both synthetic identit
 
 CI (`.github/workflows/ci.yml`) repeats migration, seed, lint, type checking, unit/component tests, PostgreSQL integration tests, builds, and browser tests. It creates no external resource beyond the ephemeral public-repository runner and service container.
 
+## Retrieval foundation (evidence only)
+
+The committed corpus is ingested only through its fixed manifest; no arbitrary filesystem path or URL is accepted. Use an explicit cache location if desired, then intentionally download/index MiniLM:
+
+```bash
+nvm use 22
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:smoke
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:ingest
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:search -- "urgent incident acknowledgement"
+pnpm --filter @relayops/api knowledge:inspect
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:evaluate
+```
+
+Normal CI and unit tests do not download model weights. MiniLM requires the repository-pinned Node 22 runtime; if the runtime/cache/network/model is unavailable, ingestion/search fails honestly and a new source version is not activated. Full instructions, model integrity evidence, and the versioned retrieval gold set are in [`docs/RAG.md`](docs/RAG.md).
+
 ## Remaining milestones—not completed claims
 
-1. Local/open-source documentation ingestion and RAG, with evaluated retrieval and source lifecycle.
+1. Local grounded answer generation and UI/runtime citations (future Qwen/Ollama work; not present).
 2. Narrow authorized account tools and grounded runtime citations.
 3. Production authentication/security review.
 4. Deployment and portfolio evidence only after those capabilities genuinely exist.

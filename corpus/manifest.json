@@ -1,0 +1,8 @@
+[
+  {"logicalId":"incident-response-policy","title":"Incident response policy (superseded baseline)","format":"html","path":"sources/incident-response-v1.html","visibility":"PUBLIC","namespace":"relayops-public"},
+  {"logicalId":"incident-response-policy","title":"Incident response policy","format":"html","path":"sources/incident-response-v2.html","visibility":"PUBLIC","namespace":"relayops-public"},
+  {"logicalId":"dispatch-basics","title":"Dispatch basics","format":"html","path":"sources/dispatch-basics.html","visibility":"PUBLIC","namespace":"relayops-public"},
+  {"logicalId":"relayops-faq","title":"RelayOps public FAQ","format":"faq-json","path":"sources/faq.json","visibility":"PUBLIC","namespace":"relayops-public"},
+  {"logicalId":"field-visit-manual","title":"Field visit manual","format":"pdf","path":"sources/field-visit-manual.pdf","visibility":"PUBLIC","namespace":"relayops-public"},
+  {"logicalId":"onboarding-guide","title":"Dispatcher onboarding guide","format":"docx","path":"sources/dispatcher-onboarding.docx","visibility":"PUBLIC","namespace":"relayops-public"}
+]

@@ -54,6 +54,26 @@ enum TicketPriority {
   HIGH
 }
 
+enum KnowledgeVisibility {
+  PUBLIC
+  ORGANIZATION
+}
+
+enum KnowledgeVersionStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+  SUPERSEDED
+}
+
+enum KnowledgeRunStatus {
+  RUNNING
+  SUCCEEDED
+  SKIPPED
+  FAILED
+}
+
 model User {
   id          String                   @id @default(uuid()) @db.Uuid
   email       String                   @unique
@@ -79,6 +99,7 @@ model Organization {
   technicians   Technician[]
   jobs          Job[]
   supportTickets SupportTicket[]
+  knowledgeSources KnowledgeSource[]
 
   @@map("organizations")
 }
@@ -178,6 +199,85 @@ model Job {
   @@unique([organizationId, reference])
   @@index([organizationId, status])
   @@map("jobs")
+}
+
+model KnowledgeSource {
+  id             String              @id @default(uuid()) @db.Uuid
+  logicalId      String              @unique @map("logical_id")
+  title          String
+  visibility     KnowledgeVisibility
+  namespace      String
+  organizationId String?             @map("organization_id") @db.Uuid
+  activeVersionId String?            @unique @map("active_version_id") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions       KnowledgeSourceVersion[] @relation("SourceVersions")
+  ingestionRuns  KnowledgeIngestionRun[]
+  activeVersion  KnowledgeSourceVersion? @relation("ActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+
+  @@index([visibility, namespace])
+  @@index([organizationId])
+  @@map("knowledge_sources")
+}
+
+model KnowledgeSourceVersion {
+  id              String                 @id @default(uuid()) @db.Uuid
+  sourceId        String                 @map("source_id") @db.Uuid
+  checksum        String
+  parserVersion   String                 @map("parser_version")
+  sourceFormat    String                 @map("source_format")
+  status          KnowledgeVersionStatus @default(PENDING)
+  modelId         String?                @map("model_id")
+  modelVersion    String?                @map("model_version")
+  error           String?
+  createdAt       DateTime               @default(now()) @map("created_at")
+  completedAt     DateTime?              @map("completed_at")
+  source          KnowledgeSource        @relation("SourceVersions", fields: [sourceId], references: [id], onDelete: Cascade)
+  activeForSource KnowledgeSource?       @relation("ActiveVersion")
+  chunks          KnowledgeChunk[]
+  runs            KnowledgeIngestionRun[]
+
+  @@unique([sourceId, checksum, parserVersion])
+  @@index([sourceId, status])
+  @@map("knowledge_source_versions")
+}
+
+model KnowledgeIngestionRun {
+  id          String             @id @default(uuid()) @db.Uuid
+  sourceId    String             @map("source_id") @db.Uuid
+  versionId   String?            @map("version_id") @db.Uuid
+  status      KnowledgeRunStatus @default(RUNNING)
+  error       String?
+  startedAt   DateTime           @default(now()) @map("started_at")
+  finishedAt  DateTime?          @map("finished_at")
+  source      KnowledgeSource    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  version     KnowledgeSourceVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId, startedAt])
+  @@map("knowledge_ingestion_runs")
+}
+
+model KnowledgeChunk {
+  id          String                 @id @default(uuid()) @db.Uuid
+  versionId   String                 @map("version_id") @db.Uuid
+  ordinal     Int
+  content     String
+  heading     String?
+  section     String?
+  page        Int?
+  anchor      String?
+  charStart   Int                    @map("char_start")
+  charEnd     Int                    @map("char_end")
+  tokenCount  Int                    @map("token_count")
+  searchText  String                 @map("search_text")
+  embedding   Unsupported("vector(384)")?
+  createdAt   DateTime               @default(now()) @map("created_at")
+  version     KnowledgeSourceVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, ordinal])
+  @@index([versionId])
+  @@map("knowledge_chunks")
 }
 
 model SupportTicket {

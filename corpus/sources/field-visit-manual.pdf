@@ -1,0 +1,13 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 5 0 R >> endobj
+4 0 obj << /Type /Page /Parent 2 0 R /Contents 6 0 R >> endobj
+5 0 obj << /Length 160 >> stream
+BT /F1 12 Tf 72 720 Td (Before entering a site, confirm the address, access instructions, hazard notes, and named contact. Stop work and contact dispatch if conditions differ from the confirmed job record.) Tj ET
+endstream endobj
+6 0 obj << /Length 170 >> stream
+BT /F1 12 Tf 72 720 Td (At closeout, explain completed work in plain language, record materials actually used, and ask the contact to review the summary. Never invent measurements or completion details after leaving the site.) Tj ET
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF
