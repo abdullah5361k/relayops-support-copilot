@@ -20,7 +20,10 @@
     "knowledge:search": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts search",
     "knowledge:smoke": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts smoke",
     "knowledge:inspect": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts inspect",
-    "knowledge:evaluate": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts evaluate"
+    "knowledge:evaluate": "dotenv -e ../../.env -- ts-node src/knowledge/cli.ts evaluate",
+    "evaluation:deterministic": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts deterministic",
+    "evaluation:integrated": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts integrated",
+    "evaluation:real-model": "dotenv -e ../../.env -- ts-node src/evaluation/cli.ts real-model"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",

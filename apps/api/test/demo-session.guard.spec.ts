@@ -1,6 +1,7 @@
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import { DemoSessionGuard } from '../src/auth/demo-session.guard';
+import { DemoSessionResolver } from '../src/auth/demo-session.resolver';
 import type { TenantRequest } from '../src/auth/tenant-context';
 
 function contextFor(request: TenantRequest): ExecutionContext {
@@ -23,7 +24,7 @@ describe('DemoSessionGuard', () => {
       role: 'OWNER',
       user: { name: 'Maya Chen', email: 'maya@northstar.demo' }
     });
-    const guard = new DemoSessionGuard({ organizationMembership: { findFirst } } as unknown as PrismaService);
+    const guard = new DemoSessionGuard(new DemoSessionResolver({ organizationMembership: { findFirst } } as unknown as PrismaService));
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -37,7 +38,7 @@ describe('DemoSessionGuard', () => {
   });
 
   it('rejects unknown or caller-invented session tokens', async () => {
-    const guard = new DemoSessionGuard({} as PrismaService);
+    const guard = new DemoSessionGuard(new DemoSessionResolver({} as PrismaService));
     const request: TenantRequest = { headers: { cookie: 'relayops_demo_session=organization-prime' } };
     await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(UnauthorizedException);
   });

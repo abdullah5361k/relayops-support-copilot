@@ -15,16 +15,14 @@ describe("explicit static demonstration content", () => {
 });
 
 describe("SupportChat", () => {
-  it("opens, renders an honestly labeled static article link, and closes", async () => {
+  it("opens the same-origin local support surface and closes", async () => {
     const user = userEvent.setup();
     render(<SupportChat />);
-    await user.click(screen.getByRole("button", { name: /open simulated support chat/i }));
-    await user.click(screen.getByRole("button", { name: /how do i invite a technician/i }));
-    expect(screen.getByLabelText(/loading simulated answer/i)).toBeInTheDocument();
-    expect(await screen.findByText("Static documentation link", {}, { timeout: 2000 })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /invite your team and manage seats/i })).toHaveAttribute("href", "/help/invite-team-members");
-    expect(screen.getByText(/no ai, rag, live citation/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /open relay support/i }));
+    expect(screen.getByText(/local evidence and optional local qwen/i)).toBeInTheDocument();
+    expect(screen.getByText(/answers are accepted only after/i)).toBeInTheDocument();
+    expect(screen.getByText(/fictional demo/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /close support chat/i }));
-    expect(screen.getByRole("button", { name: /open simulated support chat/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open relay support/i })).toBeInTheDocument();
   });
 });

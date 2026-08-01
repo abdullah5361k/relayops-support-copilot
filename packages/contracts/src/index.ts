@@ -117,9 +117,12 @@ export interface DocumentationEvidenceReference {
 }
 
 export interface HandoffPreviewInput {
+  /** Bounded user-approved question/summary, never a model instruction. */
   summary: string;
   documentationEvidence: DocumentationEvidenceReference[];
   conversationExcerpt?: string;
+  /** Optional closed read plan. The server recomputes this evidence from its own tenant session. */
+  accountToolPlan?: SupportAccountToolPlan;
 }
 
 export interface HandoffPreviewResult {
@@ -130,6 +133,7 @@ export interface HandoffPreviewResult {
     summary: string;
     documentationEvidence: DocumentationEvidenceReference[];
     conversationExcerpt: string | null;
+    accountEvidence: SupportAccountEvidence[];
   };
 }
 
@@ -153,55 +157,88 @@ export type AccountToolReadResult = SubscriptionSeatUsageResult | JobStatusToolR
 export type AccountToolErrorCode = 'invalid_argument' | 'not_found' | 'invalid_draft' | 'draft_expired' | 'draft_cancelled';
 export interface AccountToolError { kind: 'error'; code: AccountToolErrorCode; }
 
-/** Public-corpus support generation contracts. Session details, if present, are server-owned. */
+/**
+ * Canonical support boundary. The request never contains a tenant, actor, tool,
+ * URL, corpus location, account facts, or session assertion. Those are derived
+ * exclusively by the API from its HttpOnly demo session and allowlists.
+ */
 export type SupportAnswerState = 'ANSWERED' | 'REFUSED' | 'ERROR';
 export type SupportRefusalReason =
   | 'INSUFFICIENT_EVIDENCE'
-  | 'UNSUPPORTED_GENERATION'
+  | 'ACCOUNT_SIGN_IN_REQUIRED'
+  | 'ACCOUNT_REFERENCE_UNAVAILABLE'
   | 'INVALID_MODEL_OUTPUT'
   | 'PROVIDER_UNAVAILABLE'
   | 'PROVIDER_TIMEOUT'
   | 'RETRIEVAL_UNAVAILABLE'
   | 'CANCELLED';
 
-export interface SupportAnswerRequest {
-  question: string;
-  /** Reserved for a future server-derived session context. Callers must not supply account data. */
-  session?: { authenticated: boolean; extension?: Record<string, never> };
-}
+export interface SupportAnswerRequest { question: string; }
+export type SupportSourceType = 'html' | 'faq-json' | 'pdf' | 'docx';
 
+/** Citation metadata is copied only from an active retrieved chunk. `anchor` is display metadata, never a URL. */
 export interface SupportCitation {
   evidenceId: string;
   sourceLogicalId: string;
   sourceTitle: string;
+  sourceType: SupportSourceType;
   heading: string | null;
   section: string | null;
   page: number | null;
   anchor: string | null;
+  excerpt: string;
 }
 
-export interface SupportProviderStatus {
-  provider: 'ollama';
-  model: 'qwen3:4b';
-  available: boolean;
-}
+/** Fixed, server-selected read tools. Arguments exclude all tenant and actor authority. */
+export type SupportAccountToolName = 'subscription_seat_usage' | 'job_status' | 'support_ticket_status';
+export type SupportAccountToolPlan =
+  | { tool: 'subscription_seat_usage'; arguments: Record<string, never> }
+  | { tool: 'job_status'; arguments: { reference: string } }
+  | { tool: 'support_ticket_status'; arguments: { reference: string } };
+
+/** Account facts cannot cite documentation and documentation citations cannot represent account facts. */
+export type SupportAccountEvidence =
+  | { kind: 'subscription_seat_usage'; label: 'Subscription seat usage'; planName: string; status: string; seatsUsed: number; seatLimit: number }
+  | { kind: 'job_status'; label: 'Job status'; reference: string; status: JobStatus }
+  | { kind: 'support_ticket_status'; label: 'Support ticket status'; reference: string; status: TicketStatus };
+
+export interface SupportProviderStatus { provider: 'ollama'; model: 'qwen3:4b'; available: boolean; }
 
 export interface SupportAnswerResponse {
   traceId: string;
   state: SupportAnswerState;
+  /** Present only after server validation; token drafts are never authoritative. */
   answer: string | null;
   citations: SupportCitation[];
+  accountEvidence: SupportAccountEvidence[];
+  accountToolPlan: SupportAccountToolPlan | null;
+  handoffAvailable: boolean;
   refusalReason: SupportRefusalReason | null;
   suggestedTopics: string[];
   provider: SupportProviderStatus;
-  /** Intentionally empty: account-tool and handoff use their separately authorized contracts. */
-  extension: Record<string, never>;
 }
 
+/** SSE only contains lifecycle/status plus one server-validated terminal response. */
 export type SupportStreamEvent =
-  | { type: 'lifecycle'; traceId: string; stage: 'retrieving' | 'generating' | 'complete' }
+  | { type: 'lifecycle'; traceId: string; stage: 'planning' | 'retrieving' | 'generating' | 'complete' }
   | { type: 'status'; traceId: string; provider: SupportProviderStatus }
-  | { type: 'answer'; traceId: string; answer: string }
-  | { type: 'citations'; traceId: string; citations: SupportCitation[] }
-  | { type: 'refusal'; traceId: string; reason: SupportRefusalReason; suggestedTopics: string[] }
-  | { type: 'error'; traceId: string; reason: SupportRefusalReason; message: string };
+  | { type: 'final'; response: SupportAnswerResponse }
+  | { type: 'refusal'; response: SupportAnswerResponse }
+  | { type: 'error'; response: SupportAnswerResponse };
+
+export type KnowledgeSourceStatus = 'active' | 'previous' | 'failed';
+export interface KnowledgeSourceSummary {
+  logicalId: string; title: string; sourceType: SupportSourceType; status: KnowledgeSourceStatus;
+  activeVersion: string | null; updatedAt: string; chunkCount: number;
+}
+export interface KnowledgeRunSummary {
+  id: string; sourceLogicalId: string; status: 'completed' | 'running' | 'skipped' | 'failed';
+  stage: 'queued' | 'processing' | 'complete' | 'failed'; startedAt: string; finishedAt: string | null; error: string | null;
+}
+export interface KnowledgeSnapshot {
+  sources: KnowledgeSourceSummary[]; runs: KnowledgeRunSummary[];
+  model: { name: 'Xenova/all-MiniLM-L6-v2'; status: 'ready' | 'unavailable'; cache: 'present' | 'missing'; note: string };
+}
+export interface KnowledgeSearchHit { citation: SupportCitation; score: number; }
+export interface KnowledgeReindexRequest { logicalId?: string; }
+export interface KnowledgeReindexResponse { results: Array<{ logicalId: string; status: 'ingested' | 'skipped' | 'failed' }>; runs: KnowledgeRunSummary[]; }

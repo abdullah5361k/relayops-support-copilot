@@ -15,6 +15,6 @@ export interface EmbeddingProvider {
 export interface Evidence {
   /** Stable chunk id from the active server-owned source version. */
   id: string;
-  sourceLogicalId: string; sourceTitle: string; content: string; heading: string | null; section: string | null;
+  sourceLogicalId: string; sourceTitle: string; sourceType: SourceFormat; content: string; heading: string | null; section: string | null;
   page: number | null; anchor: string | null; score: number; semanticRank?: number; keywordRank?: number;
 }

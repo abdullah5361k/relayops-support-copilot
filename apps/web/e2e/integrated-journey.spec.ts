@@ -59,3 +59,38 @@ test('direct protected navigation without a session returns to demo entry', asyn
   await expect(page).toHaveURL(/\/demo/);
   await expect(page.getByRole('heading', { name: 'Choose an identity' })).toBeVisible();
 });
+
+test('live same-origin support separates account evidence, reports Qwen unavailable, and confirms synthetic handoff only after review', async ({ page }) => {
+  await signIn(page, /Maya at Northstar HVAC/);
+  await page.goto('/dashboard/support');
+  const input = page.getByRole('textbox', { name: /ask a support question/i });
+  await input.fill('Why can’t I add another technician to my current subscription? I need a human handoff.');
+  await page.getByRole('button', { name: 'Send question' }).click();
+  await expect(page.getByRole('region', { name: /private account evidence/i })).toBeVisible();
+  await expect(page.getByText(/3 of 10 seats/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /prepare handoff for review/i })).toBeVisible();
+  await page.getByRole('button', { name: /prepare handoff for review/i }).click();
+  await expect(page.getByRole('region', { name: /handoff confirmation/i })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('region', { name: /handoff confirmation/i })).toHaveCount(0);
+  await page.getByRole('button', { name: /prepare handoff for review/i }).click();
+  await page.getByRole('button', { name: /confirm and create synthetic ticket/i }).click();
+  await expect(page.getByText(/Synthetic ticket confirmed/i)).toBeVisible();
+  await page.getByRole('button', { name: /try another question/i }).click();
+  await input.fill('How quickly is a confirmed urgent interruption acknowledged?');
+  await page.getByRole('button', { name: 'Send question' }).click();
+  await expect(page.locator('.state-message.failure')).toContainText(/Local Qwen unavailable|No validated answer/i);
+});
+
+test('owner Knowledge console reads active local state, searches evidence, and only reindexes a committed source', async ({ page }) => {
+  await signIn(page, /Maya at Northstar HVAC/);
+  await page.goto('/dashboard/knowledge');
+  await expect(page.getByText('Sources and active versions')).toBeVisible();
+  await expect(page.getByText(/Configured local MiniLM cache|MiniLM cache is not configured/i)).toBeVisible();
+  await page.getByRole('textbox', { name: /search evidence chunks/i }).fill('urgent incident acknowledgement');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page.getByText(/Incident response policy/i).first()).toBeVisible();
+  await page.getByRole('button', { name: /Dispatch basics/ }).click();
+  await page.getByRole('button', { name: /reindex committed source/i }).click();
+  await expect(page.getByText(/Committed manifest reindex completed|previous active versions were retained/i)).toBeVisible({ timeout: 60_000 });
+});

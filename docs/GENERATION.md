@@ -1,77 +1,74 @@
-# RelayOps grounded generation (local Qwen only)
+# Local grounded generation (Qwen only)
 
-This layer produces public-corpus support answers only. It has no product UI binding, account tools, handoff, customer-data retrieval, writes, URLs, files, shell access, model-selected tools, hosted model, API key, billing requirement, or cloud dependency. It is intentionally separate from the static support-chat demonstration.
+RelayOps is an original fictional portfolio demo. This integration runs only on a local machine: committed MiniLM embeddings, local PostgreSQL, and an optional local Ollama `qwen3:4b`. It has no hosted model, key, billing account, cloud resource, production deployment, or real customer data.
 
-## Optional zero-cost runtime
+## Current verification status
 
-The normal database path remains unchanged and **does not** start Ollama or download model weights. Use a distinct Compose project and an explicit loopback port for this task:
+This branch verified MiniLM ingestion/retrieval, deterministic contract evaluation, tenant/account isolation, handoff confirmation safety, and browser unavailable-provider behavior. On the isolated integrated PostgreSQL database, MiniLM's existing retrieval gold set reported `1.00` recall@5 / expected-source hit rate with zero stale/namespace violations; the 60-case integrated deterministic-provider run reported `0.933` retrieval hit, `0.983` outcome, full citation validity/coverage/tool/handoff precision, and zero unsupported/stale/namespace/tenant/pre-confirmation-mutation violations. These are **not Qwen metrics**. It **did not verify real `qwen3:4b` execution, real-model quality, citations, or latency**: the authorized free Docker image/model download made progress but stalled before completion. The UI/API therefore continue to show only the honest local-provider-unavailable state until a future operator completes the documented local pull. No hosted or substitute model was used.
 
-```bash
-COMPOSE_PROJECT_NAME=relayops-rag-generation RELAYOPS_DB_PORT=55433 docker compose up -d --wait
-# Pick another port if 11435 is occupied; it is deliberately not assumed free.
-COMPOSE_PROJECT_NAME=relayops-rag-generation RELAYOPS_OLLAMA_PORT=11435 docker compose --profile ollama up -d --wait ollama
-COMPOSE_PROJECT_NAME=relayops-rag-generation docker compose exec ollama ollama pull qwen3:4b
-```
+## Bounded setup
 
-`ollama pull` is deliberately separate from service startup. `qwen3:4b` is pinned: `RELAYOPS_OLLAMA_MODEL` may only be that exact value, and RelayOps never silently substitutes a model. Blobs live in the local Docker volume `relayops_ollama`, which is not in git. Do not add model caches to the repository.
-
-For an API started on the host, set the matching local endpoint:
+Use an isolated Compose project and ports so another project stack is never reused:
 
 ```bash
-RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11435 \
-RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm dev:api
+COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_DB_PORT=55434 docker compose up -d --wait postgres
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:deploy
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:seed
+# Intentional local cache/download, never normal CI or git:
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+  RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:ingest
+COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_OLLAMA_PORT=11436 docker compose --profile ollama up -d --wait ollama
+COMPOSE_PROJECT_NAME=relayops-rag-final docker compose exec ollama ollama pull qwen3:4b
 ```
 
-The production adapter accepts local `http://localhost`, `127.0.0.1`, or `::1` only. Its defaults are 1.5s connect, 45s read, two active requests and four queued requests; configure `RELAYOPS_OLLAMA_CONNECT_TIMEOUT_MS`, `RELAYOPS_OLLAMA_READ_TIMEOUT_MS`, and `RELAYOPS_OLLAMA_CONCURRENCY` for a constrained local machine. A stopped service, missing model, timeout, invalid provider JSON, or cancellation is reported as such—never as an answer.
+Model blobs remain in the local Compose volume and MiniLM remains in `RELAYOPS_MODEL_CACHE`; both are ignored by git. Start the API with `RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436`, `RELAYOPS_OLLAMA_CONCURRENCY=1` on an 11 GiB machine, and a finite read timeout. The app rejects any model tag other than exactly `qwen3:4b` and any non-local provider URL. If the pull/runtime cannot complete after bounded troubleshooting, record the exact blocker; never substitute a model or claim a smoke passed.
 
-## Grounding boundary
+## Contract and safety boundary
 
-`SupportAnswerService` embeds the question with the existing MiniLM adapter, calls the server-owned public namespace/active-version hybrid retrieval, and requires at least one substantive record with RRF score `>= 0.015` by default. Tune only deliberately with `RELAYOPS_GENERATION_MIN_EVIDENCE_COUNT` and `RELAYOPS_GENERATION_MIN_EVIDENCE_SCORE`. Weak evidence refuses before the Qwen availability check or generation call.
-
-The model prompt contains the bounded question and at most four 1,200-character evidence records inside `EVIDENCE_DATA_START` / `EVIDENCE_DATA_END`. Documents are expressly untrusted data; their instructions, links, tool requests, and role changes are ignored. Qwen is asked for JSON claims with one distinct evidence ID per claim. It is forbidden to guess, invent tools/actions, or make uncited account, legal, competitor, pricing, security, or product claims.
-
-The server parses and validates JSON before exposing any text. Each citation ID must occur exactly once in that exact active retrieval set and maps server-side to source logical ID/title and heading, section, page, and anchor. Fabricated or duplicate IDs, malformed claims, empty support excerpts, and invalid JSON become `INVALID_MODEL_OUTPUT`; no partial model tokens are sent to callers. Suggested topics are derived only from retrieved headings/source titles.
-
-A trace stores a UUID, question SHA-256 (not raw question/prompt), retrieved chunk IDs, embedding/prompt/threshold/generation configuration, provider/model identity, outcome, refusal reason, citation count, and latency. It stores no account data and no raw prompts/completions.
-
-## API and SSE contract
-
-Shared request/response/event types live in `packages/contracts/src/index.ts`.
+The shared canonical contract is `packages/contracts/src/index.ts`:
 
 ```text
 POST /api/support/answers
-POST /api/support/answers/stream   (SSE response over fetch)
+POST /api/support/answers/stream  # fetch SSE
 body: { "question": "…" }
 ```
 
-`session` is a reserved response-contract-compatible extension only; callers cannot use it to provide account data. A normal response has `traceId`, `state` (`ANSWERED`, `REFUSED`, `ERROR`), nullable `answer`, validated `citations`, nullable `refusalReason`, grounded `suggestedTopics`, pinned `provider` status, and an intentionally empty future extension point.
+The request has no tenant, actor, corpus namespace, URL, tool, account fact, or session assertion. The server derives an optional demo session only from its HttpOnly cookie. Retrieval hardcodes active public evidence. Qwen gets at most four 1,200-character evidence records inside explicit data delimiters, has no tools/files/URLs/account access, and is instructed to treat both question and documents as untrusted data.
 
-The stream sends `lifecycle` (`retrieving`, `generating`, `complete`), `status`, then exactly one terminal sequence: `answer` followed by `citations`, `refusal`, or `error`. It intentionally has no text delta event: the final answer is released only after citation validation. Disconnecting the browser aborts queued or active downstream Qwen work and prevents further writes.
+The model returns bounded JSON claims. Server validation rejects malformed JSON, fabricated/duplicate IDs, unsupported citations, and claims with no substantive active excerpt. Empty grounded claims become a refusal. SSE sends lifecycle/status then one server-validated terminal response; no draft/model token is authoritative or sent to the UI. Citation metadata is copied from the active chunk (logical ID/title/format/location/excerpt), never from a model URL.
 
-## Explicit real-model smoke
+Account facts are not Qwen output. A deterministic server policy may select only subscription seats, job status, or ticket status after a valid demo session. Returned facts are separately typed/labeled account evidence. Qwen cannot create a ticket; handoff requires the existing actor-bound preview then explicit confirmation.
 
-This is intentionally manual and resource-dependent (the Qwen download is multi-gigabyte and local CPU latency can be substantial). After corpus ingestion has been deliberately completed, use the API and record the actual model/runtime/latency output in a local run log; do not claim it succeeded without running it:
+## Evaluation and real smoke
 
-```bash
-curl -N -H 'content-type: application/json' \
-  -d '{"question":"How quickly should an urgent incident be acknowledged?"}' \
-  http://127.0.0.1:3001/api/support/answers/stream
-curl -s -H 'content-type: application/json' \
-  -d '{"question":"Can you change my subscription?"}' \
-  http://127.0.0.1:3001/api/support/answers
-```
-
-The first must show a validated citation; the second must refuse for insufficient public evidence. If the local host cannot pull/run Qwen after bounded troubleshooting, report the local resource/runtime blocker rather than treating deterministic test doubles as a smoke success.
-
-## Validation
-
-Normal deterministic checks never pull Qwen:
+The versioned 60-question set is `corpus/support-evaluation.v1.json` (documentation, paraphrase/multi-source, refusal, stale/injection, two tenant/account paths, and handoff safety). The fully deterministic evaluator uses declared deterministic embeddings/provider and is **not** Qwen evidence:
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+# Use a fresh isolated evaluation database because it deliberately indexes deterministic vectors.
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+  pnpm --filter @relayops/api evaluation:deterministic
 ```
 
-With PostgreSQL seeded, also run `pnpm test:integration` and `pnpm test:e2e`. Generation unit tests use deterministic fake embeddings and model providers; they cover prompt injection boundaries, thresholds, provider failures, malformed output, fabricated/duplicate citations, and SSE final-event ordering/cancellation.
+It exits nonzero below 0.90 retrieval/outcome/tool/handoff rates, below full citation validity/coverage, or for any unsupported claim, stale/namespace/tenant violation, or pre-confirmation handoff mutation. Those thresholds protect deterministic regression behavior. After real MiniLM ingestion, run the same deterministic provider against the integrated real-vector database (still **not** Qwen):
+
+```bash
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" \
+  pnpm --filter @relayops/api evaluation:integrated
+```
+
+Real-model quality is reported separately and is never compared with deterministic-double metrics:
+
+```bash
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" \
+RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436 RELAYOPS_OLLAMA_CONCURRENCY=1 \
+  pnpm --filter @relayops/api evaluation:real-model
+```
+
+After a future operator completes the explicit pull, this is the one-command local real-model smoke/evaluator path (it does not pull or substitute a model):
+
+```bash
+PATH="$HOME/.nvm/versions/node/v22.11.0/bin:$PATH" DATABASE_URL='postgresql://relayops@localhost:55436/relayops?schema=public' RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436 RELAYOPS_OLLAMA_CONCURRENCY=1 pnpm --filter @relayops/api evaluation:real-model
+```
+
+Record `docker compose ... exec ollama ollama show qwen3:4b --verbose`, host RAM/disk, model tag/digest if reported, API parameters, and latency. Verify a cited documentation answer; out-of-scope refusal; signed-in seat answer with separate account evidence; injection resistance; and a handoff offer followed by preview/cancel (no ticket) then one explicit confirmation (synthetic ticket). Do not call deterministic results real-Qwen metrics.

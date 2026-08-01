@@ -1,45 +1,34 @@
-# Web/API integration boundary
+# Live local support integration boundary
 
-`apps/web/lib/contracts.ts` defines the UI-facing `RelayOpsAdapter`. `apps/web/lib/service.ts` is its sole binding, and binds `createApiAdapter()` from `apps/web/lib/api-adapter.ts`.
+`packages/contracts/src/index.ts` is the canonical runtime contract for support requests, validated answers/citations, account evidence, SSE, handoffs, and Knowledge operations. `apps/web/lib/rag-contracts.ts` only projects that contract into browser state; it does not define a second wire shape.
 
-## Database-backed methods
+`apps/web/lib/service.ts` remains the sole UI binding. Its default `RelayOpsAdapter.support` is `ApiRagClient` in `apps/web/lib/api-rag-client.ts`, which uses cookie-credentialed **same-origin** `/api/...` paths. `next.config.ts` proxies these paths to the local Nest process. `mock-rag-transport.ts` is test-only and is never imported by a production UI component or selected from a query parameter.
 
-The adapter sends cookie-credentialed requests for:
+## Browser/API validation
 
-- public demo identity listing and demo-session create/read/delete;
-- dashboard overview, jobs, team, customers, subscription, and support tickets.
+The browser sends only `{ question }`, capped at 1,000 characters. It sends neither tenant/actor fields, tool names, source locations, arbitrary URLs, account facts, nor session assertions. `ApiRagClient` caps JSON/SSE payloads, preserves `credentials: include`, propagates `AbortSignal`, frames SSE across arbitrary chunks, and requires matching `event:`/JSON type, one trace ID, ordered lifecycle, one terminal response, and `complete`. A disconnect, malformed frame, out-of-order event, or unsupported terminal state clears pending UI state and never displays draft text.
 
-`getWorkspace()` composes those typed endpoint responses. It never sends an organization identifier. The Nest guard maps the allowlisted opaque HttpOnly cookie to an active membership and derives `organizationId` server-side. API services still apply an organization predicate to every private query and compound record lookup.
+The server streams lifecycle/status and then exactly one fully server-validated `final`, `refusal`, or `error` response. It never emits Qwen tokens. Browser citation validation requires active-evidence metadata (`logicalId`, title, format, heading/section/page/anchor, excerpt); citation cards render metadata only, never a model URL or fabricated `href`.
 
-Browser requests use same-origin `/api` by default. `apps/web/next.config.ts` proxies these to `RELAYOPS_API_INTERNAL_URL` (default `http://127.0.0.1:3001`). This avoids browser CORS/cookie complexity while preserving the independently testable Nest API. Direct API CORS remains credential-aware for documented curl and development diagnostics.
+## Documentation versus account evidence
 
-A `401` from session or private data causes protected UI routes to return to `/demo` before rendering private data. Other failures show retry controls. Switching identity calls `POST /api/demo/session`, replacing the cookie; sign-out calls `DELETE /api/demo/session`. No tenant selection is persisted in local/session storage or treated as authority.
+Public documentation retrieval always owns the `relayops-public` namespace and active source version. Qwen sees bounded inert evidence records and has no tool or tenant capability. Its claims must cite exactly retrieved active chunks.
 
-## Deliberately static methods
+Account intent is a deterministic server policy (`subscription_seat_usage`, tenant-owned `job_status`, tenant-owned `support_ticket_status`), not a model proposal. The question body cannot alter the plan, its minimal argument, actor, or organization. A missing/foreign reference has the same refusal. Account facts are returned as a distinct `accountEvidence` union and are visually separated from documentation citations. Public documentation stays available without a session; account questions return `ACCOUNT_SIGN_IN_REQUIRED` without tenant disclosure.
 
-`apps/web/lib/static-content.ts` contains original public help-centre articles and a clearly deprecated compatibility fixture used by the legacy unit test. The workspace fallback `knowledge` records remain generic and are not rendered by the Knowledge preview. Support and Knowledge preview fixtures live behind the UI-local `RagClient` mock transport.
+## Handoff and Knowledge
 
-Those articles visibly state that they are original demo guidance. The mock transport visibly states that no live ingestion, embeddings, retrieval, account tools, AI response, ticket mutation, or publishing exists. Static content is not private tenant business data. The database-backed support ticket table is kept visually and structurally separate from the support stream and handoff preview.
+An answer can offer a handoff; it cannot create one. A signed-in browser requests a preview containing bounded question/answer text and active documentation logical IDs. An optional closed account plan is re-run by the server so account evidence is recomputed from the server session, not accepted from the browser. Preview, confirm, and cancel retain existing actor/tenant binding, expiry, replay, serializable one-time confirmation, and synthetic-ticket labeling.
 
-## UI-local live-RAG seam (preview branch)
+Knowledge read/search/reindex routes are owner-only. They reveal only committed-manifest source/version/chunk counts, sanitized run state, and local MiniLM cache health. Reindex accepts `{ logicalId? }` where the ID must be in the committed manifest; it cannot accept a path, URL, corpus body, model endpoint, or tenant. Sequential ingestion preserves the previous active version on failure.
 
-`apps/web/lib/rag-contracts.ts` is the proposed replaceable transport contract. `RagClient.streamAnswer({ question, scenario? }, signal?)` yields `started`, ordered `phase` (`pending`, `retrieving`, `generating`), `delta`, and exactly one terminal `final`, `refusal`, `error`, or `cancelled` event, followed by `ended` when applicable. A `final` event owns the only validated answer and its `Citation[]`; deltas are explicitly unvalidated and the UI discards them on malformed order, disconnect, error, refusal, or cancellation. The optional `scenario` is a development/test fixture selector and must be removed by live integration.
+## Validation
 
-The same client exposes `previewHandoff({ question, transcript, citations, accountEvidence })`, `confirmHandoff(previewId)`, and `cancelHandoff(previewId)`. A preview includes an expiry and the exact share payload. The UI never creates a ticket optimistically: confirmation is explicit, replay/expiry is an error, and synthetic success is labeled. `getKnowledge()`, `searchKnowledge(query)`, and `reindexKnowledge(sourceId)` power the source/version, run-stage/failure, public evidence inspector, and model/cache status surfaces.
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+# with a seeded isolated local PostgreSQL database
+pnpm test:integration
+pnpm test:e2e
+```
 
-`apps/web/lib/mock-rag-transport.ts` is the sole deterministic fixture implementation in this branch. It has no provider SDK, account, model, network, database, or organization-ID input. Account evidence is a distinct typed section from public documentation citations; a future server derives tenant context from the authenticated session. Replace `ragClient` at this one seam after the backend integration lands. Until then, every support and Knowledge surface says “Development mock transport” or equivalent and makes no live-RAG claim.
-
-### State and accessibility behavior
-
-The support state machine is idle → pending → retrieving → generating (draft only) → validated final/refusal/error/cancelled. One request is allowed at a time; cancel aborts the stream, clears draft text, and returns focus to the input. Status transitions use `role=status`; refusal and transport failures use `role=alert` where appropriate. Citation cards expose title, source type, heading, page/anchor, excerpt, and only supplied deep links. Account facts use a separate visual and semantic group. Handoff confirmation lists transcript, documentation sources, and account evidence before the confirm action. Reduced-motion CSS disables animation and smooth scrolling.
-
-## Final integration checklist
-
-- Replace the mock import with the live `RagClient`; remove fixture scenario controls and preview disclosure only after the live provider/retrieval contract is verified.
-- Preserve server-owned public namespace/active-version filters and server-derived tenant authority; never accept organization IDs from the browser.
-- Validate event ordering and citations server-side as well as in the client, map provider failures to the documented error codes, and retain cancellation/expiry/replay behavior.
-- Keep public help, database-backed dashboard data, and private account evidence on their existing boundaries. Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, browser accessibility checks, then integration/e2e with seeded PostgreSQL.
-
-## Configuration and validation
-
-See `README.md` for exact startup and test order. The important configuration variables are in `.env.example`. Adapter tests inject a fake `fetch`, API unit tests assert organization predicates, API integration tests use seeded PostgreSQL, and Playwright covers both identities on desktop and mobile against the real web/API/database stack.
+See `README.md`, `docs/GENERATION.md`, and `docs/ACCOUNT_TOOLS.md` for local model setup, evaluation, and the synthetic/non-production disclosure.

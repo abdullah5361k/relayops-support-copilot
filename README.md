@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, retrieval answer, or server account-tool/ticket-mutation integration is connected to that UI. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence. Separately, the backend has an optional local-only, evidence-grounded Qwen generation API and fixed API-only account tools with a confirmed synthetic support-handoff flow; those capabilities remain separate from the UI and from each other until a later authorized integration. See [`docs/GENERATION.md`](docs/GENERATION.md) and [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md).
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and tickets are database-backed deterministic demo data scoped by an HttpOnly demo session. Public help remains original local content. Support and Knowledge use a same-origin live local API adapter: active public-corpus retrieval, optional local Ollama `qwen3:4b` generation, browser/server citation validation, deterministic tenant-safe account read plans, confirmed synthetic handoff, and owner-only Knowledge inspection/reindex. A stopped/missing local model reports honestly; no fallback hosted model exists. **Real `qwen3:4b` execution was not verified for this branch because the free local image/model download stalled; no real-model quality, citation, or latency metric is claimed.** This is a fictional portfolio demo, **not production auth, deployment, customer support, billing, or service availability**. See [`docs/INTEGRATION.md`](docs/INTEGRATION.md), [`docs/GENERATION.md`](docs/GENERATION.md), and [`docs/ACCOUNT_TOOLS.md`](docs/ACCOUNT_TOOLS.md).
 
 ## Zero-cost scope
 
@@ -21,7 +21,7 @@ Fictional subscription rows never trigger billing. GitHub Actions is included fo
 
 ```text
 apps/api/       Nest API, demo-session guard, tenant-scoped services, Prisma schema/seed
-apps/web/       Next UI, real API adapter, explicit static help/chat/Knowledge content
+apps/web/       Next UI, same-origin live API adapter; static help articles only
 packages/contracts/ shared endpoint contracts
 packages/widget/    reusable React boundary; no assistant runtime
 ```
@@ -157,20 +157,26 @@ RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api 
 
 Normal CI and unit tests do not download model weights. MiniLM requires the repository-pinned Node 22 runtime; if the runtime/cache/network/model is unavailable, ingestion/search fails honestly and a new source version is not activated. Full instructions, model integrity evidence, and the versioned retrieval gold set are in [`docs/RAG.md`](docs/RAG.md).
 
-## Optional grounded generation backend
+## Optional local Qwen integration
 
-The API can use a deliberately started local Ollama `qwen3:4b` service to answer only from active public-corpus evidence. It validates every model citation server-side before returning a final answer, refuses weak evidence before model calls, and returns an honest error when the local service/model is unavailable. Streaming uses final validated SSE events only; no UI is wired to it. See [`docs/GENERATION.md`](docs/GENERATION.md) for the explicit zero-cost Docker profile/model pull, configuration, contracts, security boundary, smoke procedure, resource expectations, and validation.
+The browser uses the production same-origin `/api/support/answers/stream` adapter by default; no mock transport, scenario query parameter, or draft model token is used in production UI. The API optionally uses a deliberately started local Ollama `qwen3:4b` service to answer only from active public-corpus evidence. It validates every model citation server-side before returning a final answer, refuses weak evidence before model calls, and returns an honest error when the local service/model is unavailable. Account facts come only from fixed server-side tools and remain visually/contractually separate. Handoff preview/cancel/confirm uses the protected one-time synthetic-ticket flow. See [`docs/GENERATION.md`](docs/GENERATION.md) for explicit local model pull, resource expectations, evaluator, and smoke steps.
 
-## Remaining milestones—not completed claims
+## Buyer verification and boundaries
 
-The support and Knowledge transport in this milestone is explicitly a UI preview. Its fixtures are not production behavior or customer outcomes.
+Use a fresh local Compose project/ports so you do not reuse another stack. The optional model pull is a multi-gigabyte local download; normal lint/test/build/CI never pulls it.
 
-1. Product UI/runtime integration for the grounded-generation API.
-2. A separately reviewed local model/UI integration for the fixed account-tool and handoff seam; generation itself has no account tools.
-3. Production authentication/security review.
-4. Deployment and portfolio evidence only after those capabilities genuinely exist.
+```bash
+COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_DB_PORT=55434 docker compose up -d --wait postgres
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:deploy
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' pnpm db:seed
+DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api knowledge:ingest
+COMPOSE_PROJECT_NAME=relayops-rag-final RELAYOPS_OLLAMA_PORT=11436 docker compose --profile ollama up -d --wait ollama
+COMPOSE_PROJECT_NAME=relayops-rag-final docker compose exec ollama ollama pull qwen3:4b
+```
 
-There are no live AI responses, production auth, payment flows, GPS, dispatch optimization, mobile application, microservices, event bus, Kubernetes, or deployment in scope.
+Then run the API/web with `RELAYOPS_OLLAMA_BASE_URL=http://127.0.0.1:11436`, sign into either supplied synthetic identity, inspect a cited documentation answer, a refusal, separate seat evidence, and handoff preview/cancel before explicit confirmation. The owner Knowledge screen shows real local source/version/run/cache state and only committed-manifest reindex actions. Run `pnpm --filter @relayops/api evaluation:deterministic` on a fresh deterministic-vector database, and `evaluation:real-model` only after the local MiniLM/Qwen setup. Record actual model/runtime/digest/latency instead of treating deterministic doubles as Qwen evidence.
+
+There are no production authentication, real customer records, payment flows, real ticket delivery, deployment, GPS, dispatch optimization, mobile application, microservices, event bus, Kubernetes, or service availability claims in scope.
 
 ## License
 

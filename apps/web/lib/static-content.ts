@@ -3,14 +3,14 @@ import type { Article, ChatReply, ChatScenario, KnowledgeItem } from "./contract
 /**
  * Explicitly local public help content for surfaces not backed by the API yet.
  * The deprecated reply helper below exists only for compatibility with the
- * original unit test; application support uses RagClient/mock-rag-transport.
- * Nothing in this file is private tenant business data or a live AI response.
+ * original unit test; application support uses the same-origin live RagClient.
+ * Nothing in this file is private tenant business data, retrieved evidence, or a live AI response.
  */
 export const staticArticles: Article[] = [
   { slug: "invite-team-members", category: "Team management", title: "Invite your team and manage seats", summary: "Preview how team invitations and seat limits could work.", updated: "May 18, 2026", readTime: "4 min", body: ["This prewritten guide illustrates a future team invitation workflow. The integrated demo currently provides read-only team and seat data.", "The database-backed Team and Subscription screens show the active synthetic membership count. Invitations and plan changes are not implemented.", "No payment, email, or account mutation occurs anywhere in this demonstration."] },
   { slug: "customer-notifications", category: "Jobs", title: "Set up customer arrival notifications", summary: "A static preview of scheduled and on-the-way messages.", updated: "May 12, 2026", readTime: "3 min", body: ["Arrival notifications are demonstration documentation only.", "The integrated demo reads jobs from PostgreSQL but does not send or persist notifications."] },
   { slug: "billing-cycle", category: "Billing", title: "Plans, billing cycles, and seat changes", summary: "Understand the fictional plan data shown in the demo.", updated: "May 8, 2026", readTime: "5 min", body: ["Plans shown in RelayOps are synthetic database records and never trigger billing.", "Plan changes, invoices, charges, and payment methods are not implemented."] },
-  { slug: "knowledge-publishing", category: "Support tools", title: "Publish a help article", summary: "A static preview of a future review and publishing workflow.", updated: "April 29, 2026", readTime: "4 min", body: ["The Knowledge screen is a local visual demonstration.", "Draft edits are not saved, ingested, embedded, retrieved, or published."] },
+  { slug: "knowledge-publishing", category: "Support tools", title: "Publish a help article", summary: "A static preview of a future review and publishing workflow.", updated: "April 29, 2026", readTime: "4 min", body: ["The owner Knowledge console inspects committed local source/version/run/search state.", "Draft edits and arbitrary publishing are not implemented; only committed-manifest reindex is available."] },
   { slug: "data-controls", category: "Security", title: "Workspace data and access controls", summary: "How the integrated demo keeps its synthetic tenants separate.", updated: "April 21, 2026", readTime: "6 min", body: ["Private dashboard data comes from the local API and PostgreSQL database. Tenant context is derived from an allowlisted HttpOnly demo-session cookie.", "Browser-provided organization IDs are never accepted as authority. This boundary is demo authentication, not production authentication."] }
 ];
 

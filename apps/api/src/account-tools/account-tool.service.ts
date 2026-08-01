@@ -1,12 +1,14 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { HandoffDraftState, Prisma, TicketPriority, TicketStatus } from '@prisma/client';
+import { HandoffDraftState, KnowledgeVisibility, Prisma, TicketPriority, TicketStatus } from '@prisma/client';
 import type {
   AccountToolReadResult,
   DocumentationEvidenceReference,
   HandoffCancellationResult,
   HandoffConfirmationResult,
   HandoffPreviewInput,
-  HandoffPreviewResult
+  HandoffPreviewResult,
+  SupportAccountEvidence,
+  SupportAccountToolPlan
 } from '@relayops/contracts';
 import { randomUUID } from 'node:crypto';
 import type { TenantContextValue } from '../auth/tenant-context';
@@ -52,8 +54,16 @@ function parseDraftId(input: unknown): string {
   return input.draftId as string;
 }
 
+function parsePlan(input: unknown): SupportAccountToolPlan | undefined {
+  if (input === undefined) return undefined;
+  if (!isPlainObject(input) || !onlyKeys(input, ['tool', 'arguments']) || typeof input.tool !== 'string' || !isPlainObject(input.arguments)) throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
+  if (input.tool === 'subscription_seat_usage' && onlyKeys(input.arguments, []) && Object.keys(input.arguments).length === 0) return { tool: 'subscription_seat_usage', arguments: {} };
+  if ((input.tool === 'job_status' || input.tool === 'support_ticket_status') && onlyKeys(input.arguments, ['reference'])) return { tool: input.tool, arguments: { reference: parseReference(input.arguments.reference) } };
+  throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
+}
+
 function parsePreview(input: unknown): HandoffPreviewInput {
-  if (!isPlainObject(input) || !onlyKeys(input, ['summary', 'documentationEvidence', 'conversationExcerpt']) || !Array.isArray(input.documentationEvidence)) {
+  if (!isPlainObject(input) || !onlyKeys(input, ['summary', 'documentationEvidence', 'conversationExcerpt', 'accountToolPlan']) || !Array.isArray(input.documentationEvidence)) {
     throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
   }
   if (input.documentationEvidence.length > 8) throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
@@ -68,7 +78,8 @@ function parsePreview(input: unknown): HandoffPreviewInput {
   return {
     summary: cleanText(input.summary, 600, true)!,
     documentationEvidence,
-    conversationExcerpt: cleanText(input.conversationExcerpt, 1_000, false) ?? undefined
+    conversationExcerpt: cleanText(input.conversationExcerpt, 1_000, false) ?? undefined,
+    accountToolPlan: parsePlan(input.accountToolPlan)
   };
 }
 
@@ -76,11 +87,10 @@ function ticketReference(draftId: string): string {
   return `HND-${draftId.replaceAll('-', '').slice(0, 12).toUpperCase()}`;
 }
 
-function ticketBody(input: HandoffPreviewInput): string {
-  const evidence = input.documentationEvidence.length
-    ? input.documentationEvidence.map((item) => `- ${item.sourceId}${item.locator ? ` (${item.locator})` : ''}`).join('\n')
-    : '- No documentation evidence supplied';
-  return `Synthetic RelayOps support handoff\n\nSummary:\n${input.summary}\n\nDocumentation evidence:\n${evidence}\n\nConversation excerpt:\n${input.conversationExcerpt ?? '[none provided]'}`;
+function ticketBody(input: HandoffPreviewInput, accountEvidence: readonly SupportAccountEvidence[]): string {
+  const evidence = input.documentationEvidence.length ? input.documentationEvidence.map((item) => `- ${item.sourceId}${item.locator ? ` (${item.locator})` : ''}`).join('\n') : '- No documentation evidence supplied';
+  const account = accountEvidence.length ? accountEvidence.map((item) => `- ${item.label}: ${item.kind === 'subscription_seat_usage' ? `${item.seatsUsed} of ${item.seatLimit} seats (${item.status})` : `${item.reference} (${item.status})`}`).join('\n') : '- No account evidence shared';
+  return `Synthetic RelayOps support handoff\n\nSummary:\n${input.summary}\n\nDocumentation evidence:\n${evidence}\n\nAccount evidence (separate from documentation):\n${account}\n\nConversation excerpt:\n${input.conversationExcerpt ?? '[none provided]'}`;
 }
 
 @Injectable()
@@ -129,6 +139,8 @@ export class AccountToolService {
     return this.run(tenant, 'handoff_preview', this.previewAuditArguments(rawInput), async () => {
       await this.expirePendingForTenant(tenant);
       const input = parsePreview(rawInput);
+      await this.validateActiveDocumentation(input.documentationEvidence);
+      const accountEvidence = input.accountToolPlan ? [await this.executeClosedReadPlan(tenant, input.accountToolPlan)] : [];
       const expiresAt = new Date(Date.now() + draftLifetimeMs);
       const draft = await this.prisma.handoffDraft.create({
         data: {
@@ -136,6 +148,7 @@ export class AccountToolService {
           actorId: tenant.userId,
           summary: input.summary,
           documentationEvidence: input.documentationEvidence as unknown as Prisma.InputJsonValue,
+          accountEvidence: accountEvidence as unknown as Prisma.InputJsonValue,
           conversationExcerpt: input.conversationExcerpt ?? null,
           expiresAt
         },
@@ -143,7 +156,7 @@ export class AccountToolService {
       });
       return {
         kind: 'handoff_preview', draftId: draft.id, expiresAt: draft.expiresAt.toISOString(),
-        shared: { summary: input.summary, documentationEvidence: input.documentationEvidence, conversationExcerpt: input.conversationExcerpt ?? null }
+        shared: { summary: input.summary, documentationEvidence: input.documentationEvidence, conversationExcerpt: input.conversationExcerpt ?? null, accountEvidence }
       };
     });
   }
@@ -160,7 +173,7 @@ export class AccountToolService {
         if (claim.count === 1) {
           const draft = await tx.handoffDraft.findUnique({
             where: { organizationId_id: { organizationId: tenant.organizationId, id: draftId } },
-            select: { summary: true, documentationEvidence: true, conversationExcerpt: true, actorId: true }
+            select: { summary: true, documentationEvidence: true, accountEvidence: true, conversationExcerpt: true, actorId: true }
           });
           // The update predicate above establishes actor ownership; keep this check defensive.
           if (!draft || draft.actorId !== tenant.userId) throw new AccountToolException('invalid_draft', HttpStatus.CONFLICT);
@@ -169,6 +182,7 @@ export class AccountToolService {
             documentationEvidence: draft.documentationEvidence as unknown as DocumentationEvidenceReference[],
             conversationExcerpt: draft.conversationExcerpt ?? undefined
           };
+          const accountEvidence = draft.accountEvidence as unknown as SupportAccountEvidence[];
           const ticket = await tx.supportTicket.create({
             data: {
               organizationId: tenant.organizationId,
@@ -176,7 +190,7 @@ export class AccountToolService {
               handoffDraftId: draftId,
               reference: ticketReference(draftId),
               subject: input.summary,
-              body: ticketBody(input),
+              body: ticketBody(input, accountEvidence),
               status: TicketStatus.OPEN,
               priority: TicketPriority.NORMAL
             },
@@ -185,7 +199,7 @@ export class AccountToolService {
           // The consented ticket retains the content; the short-lived draft does not.
           await tx.handoffDraft.update({
             where: { organizationId_id: { organizationId: tenant.organizationId, id: draftId } },
-            data: { summary: '', documentationEvidence: [], conversationExcerpt: null }
+            data: { summary: '', documentationEvidence: [], accountEvidence: [], conversationExcerpt: null }
           });
           return { kind: 'handoff_confirmed', draftId, ticket: { reference: ticket.reference, status: 'OPEN' }, created: true };
         }
@@ -221,7 +235,7 @@ export class AccountToolService {
       const now = new Date();
       const cancelled = await this.prisma.handoffDraft.updateMany({
         where: { id: draftId, organizationId: tenant.organizationId, actorId: tenant.userId, state: HandoffDraftState.PENDING, expiresAt: { gt: now } },
-        data: { state: HandoffDraftState.CANCELLED, summary: '', documentationEvidence: [], conversationExcerpt: null }
+        data: { state: HandoffDraftState.CANCELLED, summary: '', documentationEvidence: [], accountEvidence: [], conversationExcerpt: null }
       });
       if (cancelled.count === 1) return { kind: 'handoff_cancelled', draftId, cancelled: true };
       const draft = await this.prisma.handoffDraft.findUnique({
@@ -238,6 +252,27 @@ export class AccountToolService {
     });
   }
 
+  private async executeClosedReadPlan(tenant: TenantContextValue, plan: SupportAccountToolPlan): Promise<SupportAccountEvidence> {
+    const result = plan.tool === 'subscription_seat_usage' ? await this.subscriptionSeatUsage(tenant)
+      : plan.tool === 'job_status' ? await this.jobStatus(tenant, plan.arguments.reference)
+        : await this.supportTicketStatus(tenant, plan.arguments.reference);
+    if (result.kind === 'subscription_seat_usage') return { kind: result.kind, label: 'Subscription seat usage', planName: result.planName, status: result.status, seatsUsed: result.seatsUsed, seatLimit: result.seatLimit };
+    if (result.kind === 'job_status') return { kind: result.kind, label: 'Job status', reference: result.reference, status: result.status };
+    return { kind: result.kind, label: 'Support ticket status', reference: result.reference, status: result.status };
+  }
+
+  private async validateActiveDocumentation(references: readonly DocumentationEvidenceReference[]): Promise<void> {
+    if (!references.length) return;
+    const logicalIds = [...new Set(references.map((reference) => reference.sourceId))];
+    const sources = await this.prisma.knowledgeSource.findMany({
+      where: { logicalId: { in: logicalIds }, visibility: KnowledgeVisibility.PUBLIC, namespace: 'relayops-public' },
+      select: { logicalId: true, activeVersionId: true, activeVersion: { select: { chunks: { select: { anchor: true } } } } }
+    });
+    if (sources.length !== logicalIds.length || sources.some((source) => !source.activeVersionId)) throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
+    const anchors = new Map(sources.map((source) => [source.logicalId, new Set(source.activeVersion?.chunks.map((chunk) => chunk.anchor).filter((anchor): anchor is string => Boolean(anchor)) ?? [])]));
+    if (references.some((reference) => reference.locator && !anchors.get(reference.sourceId)?.has(reference.locator))) throw new AccountToolException('invalid_argument', HttpStatus.BAD_REQUEST);
+  }
+
   private async withSerializationRetry<T>(action: () => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt += 1) {
       try { return await action(); }
@@ -251,21 +286,21 @@ export class AccountToolService {
   private async expirePendingForTenant(tenant: TenantContextValue): Promise<void> {
     await this.prisma.handoffDraft.updateMany({
       where: { organizationId: tenant.organizationId, state: HandoffDraftState.PENDING, expiresAt: { lte: new Date() } },
-      data: { state: HandoffDraftState.EXPIRED, summary: '', documentationEvidence: [], conversationExcerpt: null }
+      data: { state: HandoffDraftState.EXPIRED, summary: '', documentationEvidence: [], accountEvidence: [], conversationExcerpt: null }
     });
   }
 
   private async expireOne(client: Pick<PrismaService, 'handoffDraft'>, tenant: TenantContextValue, draftId: string, now: Date): Promise<void> {
     await client.handoffDraft.updateMany({
       where: { id: draftId, organizationId: tenant.organizationId, actorId: tenant.userId, state: HandoffDraftState.PENDING, expiresAt: { lte: now } },
-      data: { state: HandoffDraftState.EXPIRED, summary: '', documentationEvidence: [], conversationExcerpt: null }
+      data: { state: HandoffDraftState.EXPIRED, summary: '', documentationEvidence: [], accountEvidence: [], conversationExcerpt: null }
     });
   }
 
   private previewAuditArguments(input: unknown): SanitizedArguments {
     if (!isPlainObject(input)) return { validShape: false, summaryLength: null, conversationExcerptLength: null, documentationEvidenceCount: null };
     return {
-      validShape: onlyKeys(input, ['summary', 'documentationEvidence', 'conversationExcerpt']),
+      validShape: onlyKeys(input, ['summary', 'documentationEvidence', 'conversationExcerpt', 'accountToolPlan']),
       summaryLength: typeof input.summary === 'string' ? input.summary.length : null,
       conversationExcerptLength: typeof input.conversationExcerpt === 'string' ? input.conversationExcerpt.length : null,
       documentationEvidenceCount: Array.isArray(input.documentationEvidence) ? input.documentationEvidence.length : null
