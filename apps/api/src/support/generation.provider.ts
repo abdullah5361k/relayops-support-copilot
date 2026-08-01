@@ -10,8 +10,15 @@ export type GenerationProviderName = 'groq' | 'ollama' | 'disabled';
 export type ProviderFailureCode = 'UNAVAILABLE' | 'TIMEOUT' | 'CANCELLED' | 'MALFORMED' | 'AUTH' | 'BAD_REQUEST' | 'TOO_LARGE' | 'RATE_LIMIT' | 'SERVER' | 'NETWORK' | 'CIRCUIT_OPEN';
 export type ProviderStatusClass = 'ok' | 'unavailable' | 'timeout' | 'cancelled' | 'malformed' | 'auth' | 'bad_request' | 'too_large' | 'rate_limited' | 'server_error' | 'network_error' | 'circuit_open';
 
+export interface ProviderRequestDiagnostics {
+  requestBytes: number;
+  boundedPromptBytes: number;
+  schemaBytes: number;
+  evidenceRecordCount: number;
+}
+
 export class GenerationProviderError extends Error {
-  constructor(readonly code: ProviderFailureCode, message: string, readonly retryAfterSeconds?: number) { super(message); }
+  constructor(readonly code: ProviderFailureCode, message: string, readonly retryAfterSeconds?: number, readonly providerErrorCode?: string, readonly providerErrorType?: string, readonly diagnostics?: ProviderRequestDiagnostics) { super(message); }
 }
 
 export interface ProviderStatus {
@@ -20,7 +27,8 @@ export interface ProviderStatus {
   available: boolean;
 }
 
-export interface GenerationMetrics {
+export interface GenerationMetrics extends Partial<ProviderRequestDiagnostics> {
+  schemaRetry?: boolean;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -78,6 +86,10 @@ function headerNumber(response: Response, name: string): number | undefined {
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 function byteLength(value: string): number { return Buffer.byteLength(value, 'utf8'); }
+/** Only provider-controlled identifier syntax may leave an error response; messages/bodies never do. */
+function safeProviderIdentifier(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[a-z0-9_.-]{1,64}$/i.test(value) ? value.toLowerCase() : undefined;
+}
 function defaultObserver(event: Parameters<Observer>[0]): void {
   // Deliberately allowlisted operational fields only. Never include prompt, evidence, answer, account material, or credentials.
   console.info('[relayops-generation]', JSON.stringify(event));
@@ -238,6 +250,34 @@ interface GroqResponse {
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
 }
 
+/** Fixed, server-owned OpenAI-compatible request shape; callers supply only the already-bounded public prompt. */
+export function buildGroqChatPayload(prompt: string, maxOutputTokens = 420, outputMode: 'json_schema' | 'json_object' = 'json_schema'): Record<string, unknown> {
+  const marker = 'QUESTION_START';
+  const userContent = prompt.includes(marker) ? prompt.slice(prompt.indexOf(marker)) : prompt;
+  const responseFormat = outputMode === 'json_object' ? { type: 'json_object' } : {
+    type: 'json_schema',
+    json_schema: {
+      name: 'relayops_grounded_answer', strict: true,
+      schema: {
+        type: 'object', additionalProperties: false, required: ['claims'],
+        properties: {
+          claims: {
+            type: 'array', minItems: 0, maxItems: 3,
+            items: {
+              type: 'object', additionalProperties: false, required: ['text', 'citationIds'],
+              properties: {
+                text: { type: 'string', minLength: 1, maxLength: 500 },
+                citationIds: { type: 'array', minItems: 1, maxItems: 1, items: { type: 'string', minLength: 1, maxLength: 160 } }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+  return { model: GROQ_MODEL, messages: [{ role: 'system', content: GROUNDED_SYSTEM_PROMPT }, { role: 'user', content: userContent }], temperature: 0, max_completion_tokens: maxOutputTokens, stream: false, response_format: responseFormat };
+}
+
 /** Direct HTTPS OpenAI-compatible Groq adapter. The fixed URL/model are not browser or runtime routing inputs. */
 export class GroqProvider implements GenerationProvider {
   readonly provider = 'groq' as const;
@@ -275,49 +315,12 @@ export class GroqProvider implements GenerationProvider {
     return { provider: this.provider, model: this.model, available: true };
   }
 
-  private payload(prompt: string): Record<string, unknown> {
-    const marker = 'QUESTION_START';
-    const userContent = prompt.includes(marker) ? prompt.slice(prompt.indexOf(marker)) : prompt;
-    return {
-      model: GROQ_MODEL,
-      messages: [
-        { role: 'system', content: GROUNDED_SYSTEM_PROMPT },
-        { role: 'user', content: userContent }
-      ],
-      temperature: 0,
-      max_completion_tokens: this.maxOutputTokens,
-      stream: false,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'relayops_grounded_answer',
-          strict: true,
-          schema: {
-            type: 'object', additionalProperties: false, required: ['claims'],
-            properties: {
-              claims: {
-                type: 'array', minItems: 0, maxItems: 3,
-                items: {
-                  type: 'object', additionalProperties: false, required: ['text', 'citationIds'],
-                  properties: {
-                    text: { type: 'string', minLength: 1, maxLength: 500 },
-                    citationIds: { type: 'array', minItems: 1, maxItems: 1, items: { type: 'string', minLength: 1, maxLength: 160 } }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    };
-  }
-
-  private async post(payload: string, signal?: AbortSignal): Promise<{ response: Response; close: () => void; timedOut: () => boolean }> {
+  private async post(payload: string, signal?: AbortSignal, budgetMs = this.totalTimeoutMs): Promise<{ response: Response; close: () => void; timedOut: () => boolean }> {
     const controller = new AbortController();
     let stage: 'connect' | 'read' = 'connect';
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
-    const totalTimer = setTimeout(() => controller.abort(), this.totalTimeoutMs);
+    const totalTimer = setTimeout(() => controller.abort(), budgetMs);
     let connectTimer: ReturnType<typeof setTimeout> | undefined;
     let readTimer: ReturnType<typeof setTimeout> | undefined;
     const close = () => { clearTimeout(connectTimer); clearTimeout(readTimer); clearTimeout(totalTimer); signal?.removeEventListener('abort', onAbort); };
@@ -326,10 +329,10 @@ export class GroqProvider implements GenerationProvider {
     try {
       const response = await Promise.race<Response>([
         request,
-        new Promise<Response>((_resolve, reject) => { connectTimer = setTimeout(() => { controller.abort(); reject(new GenerationProviderError('TIMEOUT', 'Groq connection deadline elapsed')); }, this.connectTimeoutMs); })
+        new Promise<Response>((_resolve, reject) => { connectTimer = setTimeout(() => { controller.abort(); reject(new GenerationProviderError('TIMEOUT', 'Groq connection deadline elapsed')); }, Math.min(this.connectTimeoutMs, budgetMs)); })
       ]);
       clearTimeout(connectTimer);
-      stage = 'read'; readTimer = setTimeout(() => controller.abort(), this.readTimeoutMs);
+      stage = 'read'; readTimer = setTimeout(() => controller.abort(), Math.min(this.readTimeoutMs, budgetMs));
       return { response, close, timedOut };
     } catch (error) {
       close();
@@ -340,7 +343,32 @@ export class GroqProvider implements GenerationProvider {
     }
   }
 
-  private metrics(response: Response, body: GroqResponse, latencyMs: number): GenerationMetrics {
+  private requestDiagnostics(payload: string, prompt: string, schema: unknown): ProviderRequestDiagnostics {
+    return { requestBytes: byteLength(payload), boundedPromptBytes: byteLength(prompt), schemaBytes: byteLength(JSON.stringify(schema)), evidenceRecordCount: [...prompt.matchAll(/^ID: /gm)].length };
+  }
+
+  private async sanitizedErrorFields(response: Response): Promise<{ providerErrorCode?: string; providerErrorType?: string }> {
+    const declared = Number(response.headers.get('content-length') ?? '0');
+    if (Number.isFinite(declared) && declared > 8 * 1024) return {};
+    try {
+      const raw = await response.text();
+      if (byteLength(raw) > 8 * 1024) return {};
+      const value = JSON.parse(raw) as { error?: { code?: unknown; type?: unknown } };
+      return { providerErrorCode: safeProviderIdentifier(value.error?.code), providerErrorType: safeProviderIdentifier(value.error?.type) };
+    } catch { return {}; }
+  }
+
+  private async errorForResponse(response: Response, diagnostics: ProviderRequestDiagnostics): Promise<GenerationProviderError> {
+    const retry = retryAfter(response); const fields = await this.sanitizedErrorFields(response);
+    if (response.status === 401 || response.status === 403) return new GenerationProviderError('AUTH', 'Groq authentication was rejected', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+    if (response.status === 400) return new GenerationProviderError('BAD_REQUEST', 'Groq rejected the bounded request', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+    if (response.status === 413) return new GenerationProviderError('TOO_LARGE', 'Groq rejected the bounded request size', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+    if (response.status === 429) return new GenerationProviderError('RATE_LIMIT', 'Groq rate limit reached', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+    if (response.status >= 500) return new GenerationProviderError('SERVER', 'Groq service failed', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+    return new GenerationProviderError('UNAVAILABLE', 'Groq request failed', retry, fields.providerErrorCode, fields.providerErrorType, diagnostics);
+  }
+
+  private metrics(response: Response, body: GroqResponse, latencyMs: number, diagnostics: ProviderRequestDiagnostics, schemaRetry = false): GenerationMetrics {
     const usage = body.usage;
     return {
       inputTokens: typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
@@ -348,7 +376,7 @@ export class GroqProvider implements GenerationProvider {
       totalTokens: typeof usage?.total_tokens === 'number' ? usage.total_tokens : undefined,
       remainingRequests: headerNumber(response, 'x-ratelimit-remaining-requests'),
       remainingTokens: headerNumber(response, 'x-ratelimit-remaining-tokens'),
-      retryAfterSeconds: retryAfter(response), latencyMs
+      retryAfterSeconds: retryAfter(response), latencyMs, schemaRetry, ...diagnostics
     };
   }
 
@@ -357,19 +385,25 @@ export class GroqProvider implements GenerationProvider {
     const started = Date.now();
     try {
       const result = await this.queue.run(async () => {
-        this.breaker.check(); const reservation = this.limiter.reserve(byteLength(prompt), this.maxOutputTokens);
-        const payload = JSON.stringify(this.payload(prompt));
-        const request = await this.post(payload, signal);
-        const response = request.response;
+        this.breaker.check();
+        let reservation = this.limiter.reserve(byteLength(prompt), this.maxOutputTokens);
+        const requestBody = buildGroqChatPayload(prompt, this.maxOutputTokens); const payload = JSON.stringify(requestBody);
+        const schema = ((requestBody.response_format as { json_schema?: { schema?: unknown } }).json_schema?.schema);
+        let diagnostics = this.requestDiagnostics(payload, prompt, schema);
+        const deadline = started + this.totalTimeoutMs;
+        let request = await this.post(payload, signal, Math.max(1, deadline - Date.now()));
+        let response = request.response; let schemaRetry = false;
         try {
           if (!response.ok) {
-            const retry = retryAfter(response);
-            if (response.status === 401 || response.status === 403) throw new GenerationProviderError('AUTH', 'Groq authentication was rejected');
-            if (response.status === 400) throw new GenerationProviderError('BAD_REQUEST', 'Groq rejected the bounded request');
-            if (response.status === 413) throw new GenerationProviderError('TOO_LARGE', 'Groq rejected the bounded request size');
-            if (response.status === 429) throw new GenerationProviderError('RATE_LIMIT', 'Groq rate limit reached', retry);
-            if (response.status >= 500) throw new GenerationProviderError('SERVER', 'Groq service failed', retry);
-            throw new GenerationProviderError('UNAVAILABLE', 'Groq request failed', retry);
+            const error = await this.errorForResponse(response, diagnostics);
+            const schemaGenerationFailure = error.code === 'BAD_REQUEST' && error.providerErrorCode === 'json_validate_failed' && error.providerErrorType === 'invalid_request_error';
+            if (!schemaGenerationFailure) throw error;
+            // One same-model JSON-mode retry is permitted only for Groq's sanitized strict-schema generation failure.
+            request.close(); reservation = this.limiter.reserve(byteLength(prompt), this.maxOutputTokens);
+            const retryBody = buildGroqChatPayload(prompt, this.maxOutputTokens, 'json_object'); const retryPayload = JSON.stringify(retryBody);
+            diagnostics = this.requestDiagnostics(retryPayload, prompt, null); schemaRetry = true;
+            request = await this.post(retryPayload, signal, Math.max(1, deadline - Date.now())); response = request.response;
+            if (!response.ok) throw await this.errorForResponse(response, diagnostics);
           }
           const declared = Number(response.headers.get('content-length') ?? '0');
           if (Number.isFinite(declared) && declared > 64 * 1024) throw new GenerationProviderError('MALFORMED', 'Groq response exceeded the bounded size');
@@ -386,12 +420,13 @@ export class GroqProvider implements GenerationProvider {
           if (body.model !== GROQ_MODEL) throw new GenerationProviderError('MALFORMED', 'Groq response did not identify the pinned model');
           const content = body.choices?.[0]?.message?.content;
           if (typeof content !== 'string' || !content.trim() || byteLength(content) > 16 * 1024) throw new GenerationProviderError('MALFORMED', 'Groq returned no bounded structured output');
-          const metrics = this.metrics(response, body, Date.now() - started);
+          const metrics = this.metrics(response, body, Date.now() - started, diagnostics, schemaRetry);
           this.limiter.settle(reservation, metrics.totalTokens); this.breaker.success();
           return { text: content, metrics };
         } finally { request.close(); }
       }, signal);
-      this.observer({ traceId: context.traceId, provider: this.provider, model: this.model, statusClass: 'ok', latencyMs: Date.now() - started, ...result.metrics });
+      const metrics = result.metrics;
+      this.observer({ traceId: context.traceId, provider: this.provider, model: this.model, statusClass: 'ok', latencyMs: Date.now() - started, inputTokens: metrics?.inputTokens, outputTokens: metrics?.outputTokens, totalTokens: metrics?.totalTokens, remainingRequests: metrics?.remainingRequests, remainingTokens: metrics?.remainingTokens, retryAfterSeconds: metrics?.retryAfterSeconds });
       return result;
     } catch (cause) {
       const error = cause instanceof GenerationProviderError ? cause : new GenerationProviderError('NETWORK', 'Groq network request failed');

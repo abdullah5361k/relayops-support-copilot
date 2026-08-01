@@ -40,6 +40,28 @@ describe('Groq direct HTTPS provider', () => {
     await expect(provider.generate(grounded())).rejects.toMatchObject({ code });
   });
 
+  it('retains only sanitized provider error identifiers, never an error body/message', async () => {
+    const provider = adapter(jest.fn().mockResolvedValue(response(400, JSON.stringify({ error: { code: 'json_schema_failed', type: 'invalid_request_error', message: 'do-not-retain-this-message' } }))));
+    await expect(provider.generate(grounded())).rejects.toMatchObject({ code: 'BAD_REQUEST', providerErrorCode: 'json_schema_failed', providerErrorType: 'invalid_request_error' });
+  });
+
+  it('uses at most one same-model JSON-mode retry only for Groq json_validate_failed with identical public messages', async () => {
+    const fetcher = jest.fn().mockResolvedValueOnce(response(400, JSON.stringify({ error: { code: 'json_validate_failed', type: 'invalid_request_error', message: 'never expose this' } }))).mockResolvedValueOnce(response());
+    const result = await adapter(fetcher).generate(grounded());
+    expect(result.metrics?.schemaRetry).toBe(true); expect(fetcher).toHaveBeenCalledTimes(2);
+    const first = JSON.parse(String(fetcher.mock.calls[0]![1]!.body)); const retry = JSON.parse(String(fetcher.mock.calls[1]![1]!.body));
+    expect(first.model).toBe(GROQ_MODEL); expect(retry.model).toBe(GROQ_MODEL); expect(first.messages).toEqual(retry.messages);
+    expect(first.response_format.type).toBe('json_schema'); expect(retry.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('keeps request diagnostics out of normal provider observability', async () => {
+    const observer = jest.fn(); const provider = new GroqProvider({ apiKey: 'test-only-key', fetcher: jest.fn().mockResolvedValue(response()), observer });
+    await provider.generate(grounded(), undefined, { traceId: 'trace-only' });
+    const event = observer.mock.calls[0]![0] as Record<string, unknown>;
+    expect(event).toMatchObject({ traceId: 'trace-only', provider: 'groq', model: GROQ_MODEL, statusClass: 'ok' });
+    expect(event).not.toHaveProperty('requestBytes'); expect(event).not.toHaveProperty('boundedPromptBytes'); expect(event).not.toHaveProperty('schemaBytes'); expect(event).not.toHaveProperty('schemaRetry');
+  });
+
   it('maps 429 and Retry-After without sleeping or retrying', async () => {
     const fetcher = jest.fn().mockResolvedValue(response(429, '{}', { 'retry-after': '17' })); const provider = adapter(fetcher);
     await expect(provider.generate(grounded())).rejects.toMatchObject({ code: 'RATE_LIMIT', retryAfterSeconds: 17 });

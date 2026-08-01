@@ -30,7 +30,7 @@ Do not put that value in `.env.example`, source, git, browser variables, screens
 
 Groq requests non-streaming chat completions with `temperature: 0`, a bounded completion, no tools/function calls, and strict `response_format: { type: "json_schema" }`. Every schema field is required and every object has `additionalProperties: false`; claims are limited to three concise sentences with one evidence ID each. The server independently rejects malformed JSON, unknown/duplicate/missing IDs, excess fields, oversized values, unsupported claim text, and empty evidence. Citation display metadata comes only from the exact active retrieved chunk. SSE exposes lifecycle/status plus one validated final/refusal/error response; it never forwards model tokens or drafts.
 
-Hard server caps cover question/evidence/prompt/output bytes. The adapter has a 5-second connect deadline and 24-second end-to-end deadline, abort propagation, a one-active/two-waiting hosted queue, and safe status classes for auth, 400, 413, 429/`Retry-After`, 5xx, network, timeout, cancellation, and malformed output. It never sleeps/retries after output or silently switches provider.
+Hard server caps cover question/evidence/prompt/output bytes. The adapter has a 5-second connect deadline and 24-second end-to-end deadline, abort propagation, a one-active/two-waiting hosted queue, and safe status classes for auth, 400, 413, 429/`Retry-After`, 5xx, network, timeout, cancellation, and malformed output. It never sleeps/retries after output or silently switches provider. The sole pre-output exception is one same-model JSON-object retry when Groq returns the exact sanitized strict-schema failure pair `json_validate_failed` / `invalid_request_error`; it keeps identical public-only messages, remains inside the original deadline, consumes normal local quota, and still goes through all server citation/output validation. It never applies to auth, quota, general 400s, or any second retry.
 
 A local breaker opens after three qualifying provider failures in 60 seconds and stays open for five minutes. Safe observability is restricted to trace ID, provider/model, status class, latency, token counts/safe rate headers, citation count, and outcome. It intentionally stores no prompt/question/evidence/answer/account material, key fragment, or derivative hash.
 
@@ -59,6 +59,10 @@ RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api 
 # Explicit pacing stays below the Free Plan envelope; it is not an automatic retry/sleep.
 RELAYOPS_GENERATION_PROVIDER=groq RELAYOPS_EVALUATION_PACE_MS=10000 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
 RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:real-groq
+
+# Two-call sanitized diagnosis (one cited control plus the former-error case); it prints no body/prompt/evidence.
+RELAYOPS_GENERATION_PROVIDER=groq RELAYOPS_EVALUATION_PACE_MS=12000 DATABASE_URL='postgresql://relayops@localhost:55434/relayops?schema=public' \
+RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api evaluation:groq-diagnose
 ```
 
 The prior branch's historical claim remains unchanged: **real local `qwen3:4b` execution was not verified** because its local download stalled. Existing deterministic and real-MiniLM measurements are not Qwen or Groq generation measurements. Local Ollama may be evaluated later only after an explicit local pull; this work does not download it.
@@ -79,3 +83,9 @@ Run the smoke before the suite and record only safe aggregate metrics here: fixe
 | handoff safety | 0.750 | 0.750 | 6 / 2 |
 
 All categories recorded citation validity/coverage/tool precision at 1.000, unsupported-claim rate 0, and stale-version/namespace/tenant violation counts 0. Handoff safety aggregate was 0.967 because provider errors prevented some documentation handoff offers; no handoff was mutated before explicit confirmation.
+
+### Current-code targeted diagnosis (not a passed final regression)
+
+A subsequent quota-bounded two-case comparison kept the fixed model and two-record public prompt cap. The proven cited case completed with 2,635 request bytes / 1,919 bounded-prompt bytes / 407 schema bytes / two evidence records, 670 input and 197 output tokens, and one validated citation. The answerable `multi-contact` case failed strict schema generation with only the sanitized provider pair `json_validate_failed` / `invalid_request_error`: its current strict request was 2,544 / 1,828 / 407 bytes with two records and an 877-token reservation bound. The pre-reduction equivalent was 3,331 / 2,601 / 407 bytes with four records and a 1,071-token reservation bound; it had the same generic bad-request symptom. This separates the trigger (the answerable multi-contact prompt), mask (the former generic-400 mapping and larger four-record prompt), and symptom (no accepted answer/citation, never a plausible fallback).
+
+The narrowly keyed same-model JSON-object counterfactual used the identical public messages once, within the original deadline. It also returned the same sanitized provider pair (its JSON-mode request was 2,063 bytes and schema descriptor 4 bytes), so no second retry was sent. The current code therefore remains safe but the targeted final regression is **unresolved/not passed**; do not claim a current-code matched real-Groq pass or rerun the full 60-case suite until the provider-side validation cause can be resolved without broadening data, changing models, or weakening citation validation.

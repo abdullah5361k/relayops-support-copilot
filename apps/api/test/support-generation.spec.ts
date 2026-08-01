@@ -39,6 +39,11 @@ describe('grounded support generation', () => {
     expect(model.status).not.toHaveBeenCalled(); expect(model.generate).not.toHaveBeenCalled();
   });
 
+  it('caps external prompt evidence to two strongest active records while retaining server validation context', () => {
+    const prompt = buildGroundedPrompt('How quickly?', [evidence('first'), evidence('second'), evidence('third')]);
+    expect(prompt).toContain('ID: first'); expect(prompt).toContain('ID: second'); expect(prompt).not.toContain('ID: third');
+  });
+
   it('returns only validated citations mapped to active retrieved evidence metadata', async () => {
     const { instance, audit } = service(); const result = await instance.answer('How quickly should I acknowledge?');
     expect(result).toMatchObject({ state: 'ANSWERED', citations: [{ evidenceId: 'chunk-a', sourceLogicalId: 'incident-guide', page: 2 }] });

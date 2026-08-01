@@ -15,6 +15,8 @@ export const SUPPORT_EMBEDDER = Symbol('SUPPORT_EMBEDDER');
 export const SUPPORT_GENERATION_PROVIDER = Symbol('SUPPORT_GENERATION_PROVIDER');
 const MAX_QUESTION_CHARS = 1_000;
 const MAX_EVIDENCE = 4;
+// Retrieval can validate against four active chunks, while the external prompt carries only the two strongest bounded records.
+const MAX_GENERATION_EVIDENCE = 2;
 const MAX_EVIDENCE_BYTES = 1_200;
 const MAX_PROMPT_BYTES = 12_000;
 const MAX_CLAIMS = 3;
@@ -40,8 +42,8 @@ export function evidenceIsSufficient(evidence: readonly Evidence[], options: { m
 }
 
 /** Public evidence is serialized as inert data. The caller cannot choose source, namespace, tool, URL, or authority. */
-export function buildGroundedPrompt(question: string, evidence: readonly Evidence[]): string {
-  const records = evidence.slice(0, MAX_EVIDENCE).map((item) => [
+export function buildGroundedPrompt(question: string, evidence: readonly Evidence[], maxEvidence = MAX_GENERATION_EVIDENCE): string {
+  const records = evidence.slice(0, Math.min(MAX_EVIDENCE, maxEvidence)).map((item) => [
     `ID: ${utf8Slice(item.id, 160)}`,
     `SOURCE: ${utf8Slice(item.sourceTitle, 240)}`,
     `LOCATION: ${utf8Slice([item.heading, item.section, item.page ? `page ${item.page}` : null, item.anchor].filter(Boolean).join(' · ') || 'source excerpt', 240)}`,
