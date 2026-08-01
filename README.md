@@ -2,7 +2,7 @@
 
 RelayOps is an original, fictional multi-tenant field-service SaaS portfolio reference implementation. The current milestone integrates a polished Next.js experience with a NestJS/Prisma/PostgreSQL backend using deterministic Northstar HVAC and PrimeFlow Plumbing data.
 
-**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help, Knowledge, and support-chat scenarios remain clearly labeled local static demonstrations. Phase 1 adds a local-only, versioned public-corpus retrieval foundation that returns evidence; it does not connect RAG answers to the product UI or run generation.
+**Current state:** Overview, Jobs, Team, Customers, Subscription, and support tickets are database-backed and tenant-scoped by an HttpOnly demo session. Public help remains local content. Support and Knowledge now use a typed UI-local `RagClient` boundary with deterministic development transport fixtures for streaming states, validated citations, account evidence, handoff consent, and Knowledge lifecycle inspection. This is not live RAG: no provider, model, account tool, ticket mutation, or retrieval answer is connected. Phase 1 remains a local-only, versioned public-corpus retrieval foundation that returns evidence.
 
 ## Zero-cost scope
 
@@ -151,6 +151,8 @@ RELAYOPS_MODEL_CACHE="$HOME/.cache/relayops-minilm" pnpm --filter @relayops/api 
 Normal CI and unit tests do not download model weights. MiniLM requires the repository-pinned Node 22 runtime; if the runtime/cache/network/model is unavailable, ingestion/search fails honestly and a new source version is not activated. Full instructions, model integrity evidence, and the versioned retrieval gold set are in [`docs/RAG.md`](docs/RAG.md).
 
 ## Remaining milestones—not completed claims
+
+The support and Knowledge transport in this milestone is explicitly a UI preview. Its fixtures are not production behavior or customer outcomes.
 
 1. Local grounded answer generation and UI/runtime citations (future Qwen/Ollama work; not present).
 2. Narrow authorized account tools and grounded runtime citations.

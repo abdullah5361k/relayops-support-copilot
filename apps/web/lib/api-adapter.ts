@@ -11,7 +11,7 @@ import type {
 } from "@relayops/contracts";
 import type { RelayOpsAdapter } from "./contracts";
 import { RelayOpsApiError } from "./contracts";
-import { getStaticArticle, getStaticSupportReply, listStaticArticles, staticKnowledge } from "./static-content";
+import { getStaticArticle, listStaticArticles, staticKnowledge } from "./static-content";
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -58,6 +58,5 @@ export function createApiAdapter(fetchImpl: Fetch = fetch, baseUrl = process.env
     },
     listArticles: listStaticArticles,
     getArticle: getStaticArticle,
-    askSupport: (_input, _identity, scenario = "public") => getStaticSupportReply(scenario)
   };
 }
