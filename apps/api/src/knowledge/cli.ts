@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { MiniLmEmbeddingProvider } from './embeddings';
+import { createEmbeddingProvider } from './embeddings';
 import { KnowledgeIngestionService } from './ingestion.service';
 import { KnowledgeRetrievalService } from './retrieval.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,8 +10,9 @@ async function main() {
   const command = process.argv[2]; const prisma = new PrismaService(); await prisma.$connect();
   try {
     if (command === 'inspect') { console.log(JSON.stringify(await prisma.knowledgeSource.findMany({ include: { activeVersion: true, versions: { include: { runs: true, _count: { select: { chunks: true } } }, orderBy: { createdAt: 'asc' } } }, orderBy: { logicalId: 'asc' } }), null, 2)); return; }
-    if (command === 'ingest') { console.log(JSON.stringify(await new KnowledgeIngestionService(prisma).ingestCommittedCorpus(new MiniLmEmbeddingProvider()), null, 2)); return; }
-    const query = process.argv.slice(3).join(' '); const retrieval = new KnowledgeRetrievalService(prisma); const embedder = new MiniLmEmbeddingProvider();
+    const embedder = createEmbeddingProvider();
+    if (command === 'ingest') { console.log(JSON.stringify(await new KnowledgeIngestionService(prisma).ingestCommittedCorpus(embedder), null, 2)); return; }
+    const query = process.argv.slice(3).join(' '); const retrieval = new KnowledgeRetrievalService(prisma);
     if (command === 'search') { if (!query) throw new Error('Usage: knowledge:search -- "query"'); console.log(JSON.stringify(await retrieval.searchPublic(query, embedder), null, 2)); return; }
     if (command === 'smoke') { const [vector] = await embedder.embed(['RelayOps MiniLM smoke test']); console.log(JSON.stringify({ modelId: embedder.modelId, modelVersion: embedder.modelVersion, dimensions: vector?.length, finite: vector?.every(Number.isFinite), norm: vector ? Math.hypot(...vector) : null }, null, 2)); return; }
     if (command === 'evaluate') {

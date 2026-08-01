@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { chunkSections, normalizeText } from '../src/knowledge/chunker';
-import { DeterministicEmbeddingProvider, validateVector } from '../src/knowledge/embeddings';
+import { createEmbeddingProvider, DeterministicEmbeddingProvider, MiniLmEmbeddingProvider, validateVector } from '../src/knowledge/embeddings';
 import { extract, ExtractionError } from '../src/knowledge/extractors';
 
 describe('knowledge foundation deterministic boundaries', () => {
@@ -15,6 +15,12 @@ describe('knowledge foundation deterministic boundaries', () => {
     await expect(extract(Buffer.from('<script>evil()</script>'), 'html')).rejects.toBeInstanceOf(ExtractionError);
     await expect(extract(Buffer.from('not a PDF'), 'pdf')).rejects.toThrow('signature'); await expect(extract(Buffer.from('[]'), 'faq-json')).rejects.toThrow('no answers');
   });
+  it('selects deterministic embeddings only with the exact CI/test flag', () => {
+    expect(createEmbeddingProvider({ RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS: '1' })).toBeInstanceOf(DeterministicEmbeddingProvider);
+    expect(createEmbeddingProvider({})).toBeInstanceOf(MiniLmEmbeddingProvider);
+    expect(createEmbeddingProvider({ RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS: 'true' })).toBeInstanceOf(MiniLmEmbeddingProvider);
+  });
+
   it('uses stable normalized deterministic vectors and rejects bad vectors', async () => {
     const provider = new DeterministicEmbeddingProvider(); const [first] = await provider.embed(['dispatch customer schedule']); const [second] = await provider.embed(['dispatch customer schedule']);
     expect(first).toEqual(second); expect(Math.hypot(...first!)).toBeCloseTo(1); expect(() => validateVector([1])).toThrow('384'); expect(() => validateVector(new Array(384).fill(0))).toThrow('zero');

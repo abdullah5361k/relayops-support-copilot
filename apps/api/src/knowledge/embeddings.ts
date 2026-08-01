@@ -7,6 +7,13 @@ export function validateVector(vector: readonly number[]): number[] {
   const magnitude = Math.hypot(...vector); if (!Number.isFinite(magnitude) || magnitude === 0) throw new Error('Embedding has zero magnitude');
   return vector.map((value) => value / magnitude);
 }
+export const DETERMINISTIC_EMBEDDING_TEST_FLAG = 'RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS';
+
+/** CI/browser tests opt in explicitly; normal and deployed processes always use local MiniLM. */
+export function usesDeterministicTestEmbeddings(environment: NodeJS.ProcessEnv = process.env): boolean {
+  return environment[DETERMINISTIC_EMBEDDING_TEST_FLAG] === '1';
+}
+
 export class DeterministicEmbeddingProvider implements EmbeddingProvider {
   readonly modelId = 'relayops/deterministic-test-embedding'; readonly modelVersion = 'v1';
   async embed(texts: readonly string[]): Promise<number[][]> { return texts.map((text) => {
@@ -15,7 +22,7 @@ export class DeterministicEmbeddingProvider implements EmbeddingProvider {
     return validateVector(values);
   }); }
 }
-/** Real local-only MiniLM adapter. First use downloads public model files to RELAYOPS_MODEL_CACHE (or the Transformers cache); offline/corrupt state throws and never activates a version. */
+/** Production/local MiniLM adapter. First use downloads public model files to RELAYOPS_MODEL_CACHE (or the Transformers cache); offline/corrupt state throws and never activates a version. It never falls back to deterministic vectors. */
 export class MiniLmEmbeddingProvider implements EmbeddingProvider {
   readonly modelId = 'Xenova/all-MiniLM-L6-v2'; readonly modelVersion = 'onnx-fp32'; private extractor?: any;
   constructor(private readonly cacheDir = process.env.RELAYOPS_MODEL_CACHE) {}
@@ -34,4 +41,9 @@ export class MiniLmEmbeddingProvider implements EmbeddingProvider {
     for (let start = 0; start < texts.length; start += 16) { const output = await extractor(texts.slice(start, start + 16), { pooling: 'mean', normalize: true }); const data = Array.from(output.data as Float32Array); for (let offset = 0; offset < data.length; offset += EMBEDDING_DIMENSIONS) vectors.push(validateVector(data.slice(offset, offset + EMBEDDING_DIMENSIONS) as number[])); }
     return vectors;
   }
+}
+
+/** The deterministic provider is intentionally reachable only through the exact test-only flag. */
+export function createEmbeddingProvider(environment: NodeJS.ProcessEnv = process.env): EmbeddingProvider {
+  return usesDeterministicTestEmbeddings(environment) ? new DeterministicEmbeddingProvider() : new MiniLmEmbeddingProvider(environment.RELAYOPS_MODEL_CACHE);
 }

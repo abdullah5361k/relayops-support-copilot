@@ -36,10 +36,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:deploy
       - run: pnpm db:seed
+      # The exact opt-in supplies only synthetic test vectors; it never changes normal MiniLM behavior.
+      - run: RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS=1 pnpm --filter @relayops/api knowledge:ingest
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:integration
       - run: pnpm build
       - run: pnpm --filter @relayops/web exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: RELAYOPS_TEST_DETERMINISTIC_EMBEDDINGS=1 pnpm test:e2e
